@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from elr.config import load_config
+from elr.config import find_project_config, load_config
 from elr.errors import ConfigError
 
 
@@ -25,7 +25,8 @@ providers:
       dev3top:
         compartment_id: comp
         vault_id: vault
-        secret_name_template: "{var}"
+        secrets:
+          - github-services
 """,
                 encoding="utf-8",
             )
@@ -64,6 +65,49 @@ imports:
             )
             with self.assertRaises(ConfigError):
                 load_config(str(project))
+
+    def test_project_config_search_stops_at_git_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            outside = Path(tmp)
+            (outside / "env.oci.yaml").write_text("version: 1\n", encoding="utf-8")
+            repo = outside / "repo"
+            nested = repo / "a" / "b"
+            nested.mkdir(parents=True)
+            (repo / ".git").mkdir()
+
+            self.assertIsNone(find_project_config(nested))
+
+    def test_project_config_search_finds_inside_git_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            nested = repo / "a" / "b"
+            nested.mkdir(parents=True)
+            (repo / ".git").mkdir()
+            project = repo / "env.oci.yaml"
+            project.write_text("version: 1\n", encoding="utf-8")
+
+            self.assertEqual(find_project_config(nested), project.resolve())
+
+    def test_project_config_search_walks_to_root_without_git_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            nested = root / "a" / "b"
+            nested.mkdir(parents=True)
+            project = root / "env.oci.yaml"
+            project.write_text("version: 1\n", encoding="utf-8")
+
+            self.assertEqual(find_project_config(nested), project.resolve())
+
+    def test_project_config_search_honors_git_file_marker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            outside = Path(tmp)
+            (outside / "env.oci.yaml").write_text("version: 1\n", encoding="utf-8")
+            repo = outside / "repo"
+            nested = repo / "a"
+            nested.mkdir(parents=True)
+            (repo / ".git").write_text("gitdir: ../.git/worktrees/repo\n", encoding="utf-8")
+
+            self.assertIsNone(find_project_config(nested))
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import sys
 
 from .config import load_config
 from .errors import ElrError
+from .profile import add_profile
 from .resolver import resolve_env
 
 
@@ -26,6 +27,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:2] == ["profile", "add"]:
+        return _profile_add(argv[2:])
+
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -49,6 +54,23 @@ def main(argv: list[str] | None = None) -> int:
         env = os.environ.copy()
         env.update(resolution.values)
         _exec(command, env)
+        return 0
+    except ElrError as exc:
+        print(f"elr: {exc}", file=sys.stderr)
+        return 1
+
+
+def _profile_add(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="elr profile add",
+        description="Create or update the local ELR OCI profile config.",
+    )
+    parser.add_argument("--from-env-file", help="read ELR_OCI_* values from a dotenv file")
+    parser.add_argument("--force", action="store_true", help="replace an existing location")
+    args = parser.parse_args(argv)
+    try:
+        path = add_profile(from_env_file=args.from_env_file, force=args.force)
+        print(f"Wrote ELR OCI profile config: {path}")
         return 0
     except ElrError as exc:
         print(f"elr: {exc}", file=sys.stderr)

@@ -30,16 +30,33 @@ providers:
       mode: config_file
       region: us-phoenix-1
       config_file: ~/.oci/config
-      profile: DEFAULT
+      profile: ELR
 
     locations:
-      dev3top:
+      dev-env:
         compartment_id: ocid1.compartment.oc1...
         vault_id: ocid1.vault.oc1...
-        secret_name_template: "{var}"
+        secrets:
+          - github-services
+          - openai-services
 ```
 
 `mode: instance_principal` is also supported for OCI instances.
+
+You can create or update this private OCI profile config from environment values:
+
+```bash
+ELR_OCI_REGION=us-phoenix-1 \
+ELR_OCI_COMPARTMENT_ID=ocid1.compartment.oc1... \
+ELR_OCI_VAULT_ID=ocid1.vault.oc1... \
+ELR_OCI_SECRETS=github-services,openai-services \
+elr profile add
+```
+
+`elr profile add --from-env-file .sandbox/elr.env` also reads `ELR_OCI_*`
+values from a dotenv file. Shell environment values take precedence over the
+dotenv file. The command writes only `~/.config/elr/config.yaml`, creates the
+config directory with `0700`, and writes the config file with `0600`.
 
 ## Project Config
 
@@ -52,7 +69,7 @@ version: 1
 
 imports:
   - provider: oci
-    location: dev3top
+    location: dev-env
     vars:
       - GH_TOKEN
       - CLI_PROXY_API_KEY

@@ -36,13 +36,35 @@ def expand_path(path: str | os.PathLike[str]) -> Path:
 
 def find_project_config(start: Path | None = None) -> Path | None:
     cur = (start or Path.cwd()).resolve()
-    candidates = (cur, *cur.parents)
+    git_root = find_git_root(cur)
+    candidates = _search_directories(cur, git_root)
     for directory in candidates:
         for name in PROJECT_CONFIG_NAMES:
             candidate = directory / name
             if candidate.is_file():
                 return candidate
     return None
+
+
+def find_git_root(start: Path | None = None) -> Path | None:
+    cur = (start or Path.cwd()).resolve()
+    for directory in (cur, *cur.parents):
+        marker = directory / ".git"
+        if marker.is_dir() or marker.is_file():
+            return directory
+    return None
+
+
+def _search_directories(start: Path, stop: Path | None) -> tuple[Path, ...]:
+    directories = (start, *start.parents)
+    if stop is None:
+        return directories
+    result: list[Path] = []
+    for directory in directories:
+        result.append(directory)
+        if directory == stop:
+            break
+    return tuple(result)
 
 
 def default_config_paths(explicit_env: str | None = None) -> list[Path]:

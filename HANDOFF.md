@@ -80,13 +80,15 @@ providers:
       mode: config_file
       region: us-phoenix-1
       config_file: ~/.oci/config
-      profile: DEFAULT
+      profile: ELR
 
     locations:
-      dev3top:
+      dev-env:
         compartment_id: ocid1.compartment.oc1...
         vault_id: ocid1.vault.oc1...
-        secret_name_template: "{var}"
+        secrets:
+          - github-services
+          - openai-services
 ```
 
 Project config can be public. It names the provider/location and requested vars,
@@ -98,7 +100,7 @@ version: 1
 
 imports:
   - provider: oci
-    location: dev3top
+    location: dev-env
     vars:
       - GH_TOKEN
       - CLI_PROXY_API_KEY
@@ -115,7 +117,7 @@ Resolution order:
 ```text
 1. /etc/elr/config.yaml
 2. ~/.config/elr/config.yaml
-3. nearest env.oci.yaml / .env.oci.yaml, walking upward from CWD
+3. nearest env.oci.yaml / .env.oci.yaml, walking upward from CWD and stopping at git root
 4. explicit -e/--env file, if provided
 ```
 
@@ -209,7 +211,8 @@ elr -- bash -lc 'test -n "$GH_TOKEN" && echo "GH_TOKEN loaded"'
 
 `provider 'oci' required ... is not configured`
 
-- Add `~/.config/elr/config.yaml` with `providers.oci.locations.<name>`.
+- Add `~/.config/elr/config.yaml` with `providers.oci.locations.<name>`, or run
+  `elr profile add`.
 - Ensure the project `imports[].location` matches the private config location.
 
 `OCI provider requires the 'oci' Python package`
@@ -228,12 +231,8 @@ pip install oci PyYAML
 
 `OCI secret not found: GH_TOKEN`
 
-- Confirm the OCI secret name matches `secret_name_template`.
-- If secrets are prefixed, configure:
-
-```yaml
-secret_name_template: "dev3top/{var}"
-```
+- Confirm the requested var exists in one of the allowed dotenv-formatted OCI
+  secret bundles listed under `locations.<name>.secrets`.
 
 `OCI list_secrets failed`
 
@@ -248,8 +247,8 @@ secret_name_template: "dev3top/{var}"
 ## Known Gaps / Next Steps
 
 1. Finish OCI setup on the Mac with API signing key and `~/.oci/config`.
-2. Create `~/.config/elr/config.yaml` with the real `dev3top` compartment/vault.
-3. Create a real project `env.oci.yaml` for `dev3top`.
+2. Create `~/.config/elr/config.yaml` with the real `dev-env` compartment/vault.
+3. Create a real project `env.oci.yaml` for `dev-env`.
 4. Run the real OCI smoke test.
 5. Decide packaging:
    - GitHub Release script/binary

@@ -6,10 +6,12 @@ providers:
       mode: config_file
       region: us-phoenix-1
       config_file: ~/.oci/config
-      profile: DEFAULT
+      profile: ELR
 
     locations:
-      dev3top:
+      dev-env:
         compartment_id: ocid1.compartment.oc1...
         vault_id: ocid1.vault.oc1...
-        secret_name_template: "{var}"
+        secrets:
+          - github-services
+          - openai-services
