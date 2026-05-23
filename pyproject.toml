@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "elr"
+version = "0.1.0"
+description = "OCI-backed environment runner"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "ELR contributors" }]
+dependencies = [
+  "oci>=2.120.0",
+  "PyYAML>=6.0",
+]
+
+[project.scripts]
+elr = "elr.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["elr*"]
