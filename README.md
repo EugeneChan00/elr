@@ -6,6 +6,16 @@ the child process environment, and writes no plaintext `.env` file.
 
 ## Install
 
+For agents and sandboxes, install the released CLI into `~/.local/bin/elr`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/EugeneChan00/elr/main/scripts/install.sh | bash
+```
+
+The installer downloads the latest GitHub Release wheel, installs it into a
+private virtual environment under `~/.local/share/elr`, and symlinks the CLI to
+`~/.local/bin/elr`.
+
 For local development:
 
 ```bash
@@ -110,10 +120,16 @@ ELR_OCI_KEY_FILE=~/.oci/elr_api.pem
 ELR_BOOTSTRAP_ENV_FILE=.cursor/elr.env
 ```
 
-The bootstrap first uses `elr` if it is already installed, otherwise it uses the
-repo checkout with `uv run elr`, falling back to a local `.venv` editable install.
-It does not require a GitHub release artifact. `.cursor/*.env` is gitignored for
-local sandbox-only setup files.
+The bootstrap first uses `elr` if it is already installed, otherwise it installs
+the latest GitHub Release with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/EugeneChan00/elr/main/scripts/install.sh | bash
+```
+
+If curl/Python are unavailable, it falls back to the repo checkout with
+`uv run elr`, then to a local `.venv` editable install. `.cursor/*.env` is
+gitignored for local sandbox-only setup files.
 
 ## Project Config
 

@@ -4,6 +4,7 @@ import argparse
 import os
 import sys
 
+from . import __version__
 from .config import load_config
 from .errors import ElrError
 from .profile import add_profile
@@ -15,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="elr",
         description="Resolve env vars from OCI Vault and exec a command.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("-e", "--env", help="explicit project env config file")
     parser.add_argument("--no-env", action="store_true", help="run command without loading env config")
     parser.add_argument(

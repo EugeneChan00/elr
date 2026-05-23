@@ -9,6 +9,14 @@ from elr import cli
 
 
 class CliTests(unittest.TestCase):
+    def test_version(self):
+        output = io.StringIO()
+        with self.assertRaises(SystemExit) as exc:
+            with redirect_stdout(output):
+                cli.main(["--version"])
+        self.assertEqual(exc.exception.code, 0)
+        self.assertIn("elr 0.1.0", output.getvalue())
+
     def test_no_env_print_plan(self):
         output = io.StringIO()
         with redirect_stdout(output):
