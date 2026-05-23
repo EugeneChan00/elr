@@ -4,6 +4,7 @@ import base64
 from typing import Any
 
 from elr.config import ImportSpec
+from elr.dotenv import parse_dotenv_text
 from elr.errors import ConfigError, SecretResolutionError
 
 
@@ -15,17 +16,22 @@ class OciSecretProvider:
         self._secrets_client = None
         self._vaults_client = None
         self._secret_cache: dict[tuple[str, str, str], str] = {}
+        self._bundle_cache: dict[tuple[str, str, str], dict[str, str]] = {}
 
     def resolve_import(self, spec: ImportSpec) -> dict[str, str]:
         location = self.locations.get(spec.location)
         if not isinstance(location, dict):
             raise ConfigError(f"OCI location {spec.location!r} is not configured")
 
+        bundle_values = self._load_allowed_secret_values(location)
+        missing = [var for var in spec.vars if var not in bundle_values]
+        if missing:
+            raise SecretResolutionError(
+                f"OCI secrets for location {spec.location!r} did not include: {', '.join(missing)}"
+            )
         resolved: dict[str, str] = {}
         for var in spec.vars:
-            secret_name = _secret_name_for_var(var, location)
-            secret_id = self._lookup_secret_id(location, secret_name)
-            resolved[var] = self._fetch_secret_value(secret_id, var)
+            resolved[var] = bundle_values[var]
         return resolved
 
     def _clients(self):
@@ -59,6 +65,28 @@ class OciSecretProvider:
             raise ConfigError(f"unsupported OCI auth mode: {mode}")
 
         return self._secrets_client, self._vaults_client
+
+    def _load_allowed_secret_values(self, location: dict[str, Any]) -> dict[str, str]:
+        secrets = location.get("secrets")
+        if not isinstance(secrets, list) or not all(isinstance(item, str) for item in secrets):
+            raise ConfigError("OCI location requires secrets list")
+
+        values: dict[str, str] = {}
+        for secret_name in secrets:
+            cache_key = (
+                str(location.get("compartment_id")),
+                str(location.get("vault_id")),
+                secret_name,
+            )
+            if cache_key not in self._bundle_cache:
+                secret_id = self._lookup_secret_id(location, secret_name)
+                text = self._fetch_secret_value(secret_id, secret_name)
+                self._bundle_cache[cache_key] = parse_dotenv_text(
+                    text,
+                    source=f"OCI secret {secret_name}",
+                )
+            values.update(self._bundle_cache[cache_key])
+        return values
 
     def _lookup_secret_id(self, location: dict[str, Any], secret_name: str) -> str:
         explicit = location.get("secret_ids", {})
@@ -116,11 +144,3 @@ class OciSecretProvider:
             return base64.b64decode(encoded).decode("utf-8").rstrip("\n")
         except Exception as exc:
             raise SecretResolutionError(f"OCI secret content for {var_name} is not valid base64 text") from exc
-
-
-def _secret_name_for_var(var: str, location: dict[str, Any]) -> str:
-    template = str(location.get("secret_name_template", "{var}"))
-    try:
-        return template.format(var=var)
-    except Exception as exc:
-        raise ConfigError(f"invalid secret_name_template {template!r}: {exc}") from exc

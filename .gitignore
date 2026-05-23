@@ -10,3 +10,7 @@ build/
 .env
 .env.*
 !.env.oci.yaml
+.cursor/*.env
+.oci/
+*.pem
+*.key
