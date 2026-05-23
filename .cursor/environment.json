@@ -1,0 +1,3 @@
+{
+  "install": "bash scripts/cursor_elr_bootstrap.sh"
+}

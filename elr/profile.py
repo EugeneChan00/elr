@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Callable
+import base64
+import binascii
 import os
 import sys
 
@@ -17,6 +19,7 @@ DEFAULTS = {
     "ELR_OCI_AUTH_MODE": "config_file",
     "ELR_OCI_CONFIG_FILE": "~/.oci/config",
     "ELR_OCI_PROFILE": "ELR",
+    "ELR_OCI_KEY_FILE": "~/.oci/elr_api.pem",
 }
 REQUIRED = (
     "ELR_OCI_REGION",
@@ -30,26 +33,39 @@ PROMPTS = {
     "ELR_OCI_REGION": "OCI region",
     "ELR_OCI_CONFIG_FILE": "OCI config file",
     "ELR_OCI_PROFILE": "OCI profile",
+    "ELR_OCI_KEY_FILE": "OCI private key file",
     "ELR_OCI_COMPARTMENT_ID": "OCI compartment OCID",
     "ELR_OCI_VAULT_ID": "OCI vault OCID",
     "ELR_OCI_SECRETS": "OCI secret bundles (comma-separated)",
 }
+OCI_CONFIG_REQUIRED = (
+    "ELR_OCI_USER_ID",
+    "ELR_OCI_FINGERPRINT",
+    "ELR_OCI_TENANCY_ID",
+    "ELR_OCI_REGION",
+    "ELR_OCI_PRIVATE_KEY_B64",
+)
 
 
 def add_profile(
     *,
     from_env_file: str | None = None,
     force: bool = False,
+    write_oci_config: bool = False,
     config_path: Path = USER_CONFIG,
     environ: Mapping[str, str] | None = None,
     stdin=None,
     prompt: Callable[[str], str] = input,
-) -> Path:
+) -> tuple[Path, Path | None]:
     values = _collect_values(from_env_file=from_env_file, environ=environ)
     _prompt_for_missing(values, stdin=stdin, prompt=prompt)
     missing = [name for name in REQUIRED if not values.get(name)]
     if missing:
         raise ConfigError(f"missing required profile values: {', '.join(missing)}")
+    if write_oci_config:
+        oci_missing = [name for name in OCI_CONFIG_REQUIRED if not values.get(name)]
+        if oci_missing:
+            raise ConfigError(f"missing required OCI config values: {', '.join(oci_missing)}")
 
     secrets = _split_secrets(values["ELR_OCI_SECRETS"])
     if not secrets:
@@ -83,7 +99,8 @@ def add_profile(
     }
 
     _write_private_yaml(path, data)
-    return path
+    oci_config_path = _write_oci_config(values) if write_oci_config else None
+    return path, oci_config_path
 
 
 def _collect_values(
@@ -139,4 +156,51 @@ def _write_private_yaml(path: Path, data: dict[str, Any]) -> None:
     fd = os.open(path, flags, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         handle.write(text)
+    os.chmod(path, 0o600)
+
+
+def _write_oci_config(values: dict[str, str]) -> Path:
+    key_path = Path(values["ELR_OCI_KEY_FILE"]).expanduser()
+    config_path = Path(values["ELR_OCI_CONFIG_FILE"]).expanduser()
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(key_path.parent, 0o700)
+    _write_private_bytes(key_path, _decode_private_key(values["ELR_OCI_PRIVATE_KEY_B64"]))
+
+    text = "\n".join(
+        [
+            f"[{values['ELR_OCI_PROFILE']}]",
+            f"user={values['ELR_OCI_USER_ID']}",
+            f"fingerprint={values['ELR_OCI_FINGERPRINT']}",
+            f"tenancy={values['ELR_OCI_TENANCY_ID']}",
+            f"region={values['ELR_OCI_REGION']}",
+            f"key_file={key_path}",
+            "",
+        ]
+    )
+    _write_private_text(config_path, text)
+    return config_path
+
+
+def _decode_private_key(value: str) -> bytes:
+    compact = "".join(value.split())
+    try:
+        decoded = base64.b64decode(compact, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ConfigError("ELR_OCI_PRIVATE_KEY_B64 is not valid base64") from exc
+    if b"PRIVATE KEY" not in decoded:
+        raise ConfigError("ELR_OCI_PRIVATE_KEY_B64 did not decode to a PEM private key")
+    return decoded
+
+
+def _write_private_text(path: Path, text: str) -> None:
+    _write_private_bytes(path, text.encode("utf-8"))
+
+
+def _write_private_bytes(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    fd = os.open(path, flags, 0o600)
+    with os.fdopen(fd, "wb") as handle:
+        handle.write(data)
     os.chmod(path, 0o600)

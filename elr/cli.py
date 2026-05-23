@@ -22,7 +22,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print resolved variable names and sources without secret values",
     )
-    parser.add_argument("cmd", nargs=argparse.REMAINDER, help="-- <command> [args...]")
+    parser.add_argument(
+        "cmd",
+        nargs=argparse.REMAINDER,
+        help="[--] <command> [args...]; -- is optional unless the command itself starts with '-'",
+    )
     return parser
 
 
@@ -67,9 +71,20 @@ def _profile_add(argv: list[str]) -> int:
     )
     parser.add_argument("--from-env-file", help="read ELR_OCI_* values from a dotenv file")
     parser.add_argument("--force", action="store_true", help="replace an existing location")
+    parser.add_argument(
+        "--write-oci-config",
+        action="store_true",
+        help="also write ~/.oci/config and the private key from ELR_OCI_PRIVATE_KEY_B64",
+    )
     args = parser.parse_args(argv)
     try:
-        path = add_profile(from_env_file=args.from_env_file, force=args.force)
+        path, oci_config_path = add_profile(
+            from_env_file=args.from_env_file,
+            force=args.force,
+            write_oci_config=args.write_oci_config,
+        )
+        if oci_config_path:
+            print(f"Wrote OCI config: {oci_config_path}")
         print(f"Wrote ELR OCI profile config: {path}")
         return 0
     except ElrError as exc:

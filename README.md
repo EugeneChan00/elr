@@ -58,6 +58,63 @@ values from a dotenv file. Shell environment values take precedence over the
 dotenv file. The command writes only `~/.config/elr/config.yaml`, creates the
 config directory with `0700`, and writes the config file with `0600`.
 
+For fresh sandboxes, `elr profile add --write-oci-config` can also reconstruct
+the OCI SDK profile and private key from environment variables:
+
+```bash
+ELR_OCI_USER_ID=ocid1.user.oc1... \
+ELR_OCI_TENANCY_ID=ocid1.tenancy.oc1... \
+ELR_OCI_FINGERPRINT=aa:bb:cc:... \
+ELR_OCI_PRIVATE_KEY_B64="$(base64 -i ~/.oci/elr_api.pem)" \
+ELR_OCI_REGION=us-phoenix-1 \
+ELR_OCI_COMPARTMENT_ID=ocid1.tenancy.oc1... \
+ELR_OCI_VAULT_ID=ocid1.vault.oc1... \
+ELR_OCI_SECRETS=github-services,openai-services \
+elr profile add --write-oci-config
+```
+
+This writes `~/.oci/elr_api.pem`, `~/.oci/config`, and
+`~/.config/elr/config.yaml` with private local permissions. The local key file
+name does not need to match anything in OCI; it only needs to match the
+`key_file` path in the OCI config profile.
+
+## Cursor Sandbox Bootstrap
+
+This repo includes `.cursor/environment.json`, which runs:
+
+```bash
+bash scripts/cursor_elr_bootstrap.sh
+```
+
+on Cursor environment setup. In a fresh Cursor sandbox, provide these environment
+variables through Cursor's environment/secrets UI:
+
+```bash
+ELR_OCI_USER_ID=ocid1.user.oc1...
+ELR_OCI_TENANCY_ID=ocid1.tenancy.oc1...
+ELR_OCI_FINGERPRINT=aa:bb:cc:...
+ELR_OCI_PRIVATE_KEY_B64=<base64 encoded RSA private key>
+ELR_OCI_REGION=us-phoenix-1
+ELR_OCI_COMPARTMENT_ID=ocid1.tenancy.oc1...
+ELR_OCI_VAULT_ID=ocid1.vault.oc1...
+ELR_OCI_SECRETS=github-services,openai-services
+```
+
+Optional overrides:
+
+```bash
+ELR_OCI_PROFILE=ELR
+ELR_OCI_LOCATION=dev-env
+ELR_OCI_CONFIG_FILE=~/.oci/config
+ELR_OCI_KEY_FILE=~/.oci/elr_api.pem
+ELR_BOOTSTRAP_ENV_FILE=.cursor/elr.env
+```
+
+The bootstrap first uses `elr` if it is already installed, otherwise it uses the
+repo checkout with `uv run elr`, falling back to a local `.venv` editable install.
+It does not require a GitHub release artifact. `.cursor/*.env` is gitignored for
+local sandbox-only setup files.
+
 ## Project Config
 
 Project manifests can be public because they only name provider locations and

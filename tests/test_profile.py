@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import base64
 import os
 import stat
 import tempfile
@@ -141,6 +142,70 @@ ELR_OCI_SECRETS=file-services
                 add_profile(config_path=config, environ={}, stdin=NonTty())
 
             self.assertIn("ELR_OCI_REGION", str(exc.exception))
+
+    def test_write_oci_config_from_base64_private_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / ".config" / "elr" / "config.yaml"
+            oci_config = root / ".oci" / "config"
+            key_file = root / ".oci" / "elr_api.pem"
+            private_key = b"-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----\n"
+            env = _env(
+                ELR_OCI_CONFIG_FILE=str(oci_config),
+                ELR_OCI_KEY_FILE=str(key_file),
+                ELR_OCI_USER_ID="ocid1.user.oc1..example",
+                ELR_OCI_FINGERPRINT="aa:bb",
+                ELR_OCI_TENANCY_ID="ocid1.tenancy.oc1..example",
+                ELR_OCI_PRIVATE_KEY_B64=base64.b64encode(private_key).decode("ascii"),
+            )
+
+            elr_path, oci_path = add_profile(
+                config_path=config,
+                environ=env,
+                stdin=NonTty(),
+                write_oci_config=True,
+            )
+
+            self.assertEqual(elr_path, config)
+            self.assertEqual(oci_path, oci_config)
+            self.assertEqual(key_file.read_bytes(), private_key)
+            self.assertIn("[ELR]", oci_config.read_text(encoding="utf-8"))
+            self.assertIn(f"key_file={key_file}", oci_config.read_text(encoding="utf-8"))
+            self.assertEqual(_mode(key_file.parent), 0o700)
+            self.assertEqual(_mode(key_file), 0o600)
+            self.assertEqual(_mode(oci_config), 0o600)
+
+    def test_write_oci_config_requires_private_key_values(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.yaml"
+
+            with self.assertRaises(ConfigError) as exc:
+                add_profile(
+                    config_path=config,
+                    environ=_env(),
+                    stdin=NonTty(),
+                    write_oci_config=True,
+                )
+
+            self.assertIn("ELR_OCI_PRIVATE_KEY_B64", str(exc.exception))
+
+    def test_write_oci_config_rejects_invalid_private_key_base64(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.yaml"
+            env = _env(
+                ELR_OCI_USER_ID="ocid1.user.oc1..example",
+                ELR_OCI_FINGERPRINT="aa:bb",
+                ELR_OCI_TENANCY_ID="ocid1.tenancy.oc1..example",
+                ELR_OCI_PRIVATE_KEY_B64="not-base64",
+            )
+
+            with self.assertRaises(ConfigError):
+                add_profile(
+                    config_path=config,
+                    environ=env,
+                    stdin=NonTty(),
+                    write_oci_config=True,
+                )
 
 
 class NonTty(io.StringIO):
