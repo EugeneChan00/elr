@@ -33,7 +33,7 @@ elif command -v python3 >/dev/null 2>&1; then
   .venv/bin/python -m pip install -e .
   .venv/bin/elr "${profile_args[@]}"
 else
-  log "missing elr, uv, and python3; cannot bootstrap"
+  log "missing elr, curl, uv, and python3; cannot bootstrap"
   exit 1
 fi
 
