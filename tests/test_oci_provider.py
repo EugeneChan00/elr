@@ -86,14 +86,71 @@ class OciProviderTests(unittest.TestCase):
         )
         self.assertEqual(vaults.names, ["github-services"])
 
+    def test_provider_skips_missing_allowed_bundle_names(self):
+        provider = OciSecretProvider(
+            {
+                "locations": {
+                    "dev3top": {
+                        "compartment_id": "compartment",
+                        "vault_id": "vault",
+                        "secrets": ["github-services", "agent-service"],
+                    }
+                }
+            }
+        )
+        vaults = FakeVaultsClient(missing={"agent-service"})
+        provider._vaults_client = vaults
+        provider._secrets_client = FakeSecretsClient()
+
+        values = provider.resolve_import(
+            ImportSpec(
+                provider="oci",
+                location="dev3top",
+                vars=("GH_TOKEN",),
+                source=__file__,
+            )
+        )
+
+        self.assertEqual(values["GH_TOKEN"], "secret-value")
+        self.assertEqual(vaults.names, ["github-services", "agent-service"])
+
+    def test_provider_fails_when_requested_var_only_in_missing_bundle(self):
+        provider = OciSecretProvider(
+            {
+                "locations": {
+                    "dev3top": {
+                        "compartment_id": "compartment",
+                        "vault_id": "vault",
+                        "secrets": ["agent-service"],
+                    }
+                }
+            }
+        )
+        provider._vaults_client = FakeVaultsClient(missing={"agent-service"})
+        provider._secrets_client = FakeSecretsClient()
+
+        with self.assertRaises(SecretResolutionError) as exc:
+            provider.resolve_import(
+                ImportSpec(
+                    provider="oci",
+                    location="dev3top",
+                    vars=("AGENT_TOKEN",),
+                    source=__file__,
+                )
+            )
+        self.assertIn("AGENT_TOKEN", str(exc.exception))
+
 
 class FakeVaultsClient:
-    def __init__(self):
+    def __init__(self, missing=None):
         self.names = []
+        self.missing = set(missing or ())
 
     def list_secrets(self, **_kwargs):
         name = _kwargs["name"]
         self.names.append(name)
+        if name in self.missing:
+            return types.SimpleNamespace(data=[])
         item = types.SimpleNamespace(secret_name=name, id=f"{name}-id")
         return types.SimpleNamespace(data=[item])
 

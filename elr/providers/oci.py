@@ -79,7 +79,10 @@ class OciSecretProvider:
                 secret_name,
             )
             if cache_key not in self._bundle_cache:
-                secret_id = self._lookup_secret_id(location, secret_name)
+                secret_id = self._lookup_secret_id(location, secret_name, required=False)
+                if secret_id is None:
+                    self._bundle_cache[cache_key] = {}
+                    continue
                 text = self._fetch_secret_value(secret_id, secret_name)
                 self._bundle_cache[cache_key] = parse_dotenv_text(
                     text,
@@ -88,7 +91,13 @@ class OciSecretProvider:
             values.update(self._bundle_cache[cache_key])
         return values
 
-    def _lookup_secret_id(self, location: dict[str, Any], secret_name: str) -> str:
+    def _lookup_secret_id(
+        self,
+        location: dict[str, Any],
+        secret_name: str,
+        *,
+        required: bool = True,
+    ) -> str | None:
         explicit = location.get("secret_ids", {})
         if isinstance(explicit, dict) and secret_name in explicit:
             return str(explicit[secret_name])
@@ -119,6 +128,8 @@ class OciSecretProvider:
         items = list(getattr(response, "data", []) or [])
         matches = [item for item in items if getattr(item, "secret_name", None) == secret_name]
         if not matches:
+            if not required:
+                return None
             raise SecretResolutionError(f"OCI secret not found: {secret_name}")
         if len(matches) > 1:
             raise SecretResolutionError(f"OCI secret name is ambiguous: {secret_name}")
