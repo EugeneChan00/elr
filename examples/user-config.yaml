@@ -1,17 +1,47 @@
 version: 1
 
+# providers — OCI connectivity + dotenv bundle allowlist (private; do not commit to git)
+# WHY: ELR needs compartment/vault IDs and which Vault *bundles* hold KEY=VALUE dotenv for imports.
 providers:
   oci:
     auth:
-      mode: config_file
-      region: us-phoenix-1
+      mode: config_file      # HOW: OCI SDK auth via ~/.oci/config profile
       config_file: ~/.oci/config
-      profile: ELR
-
+      profile: ELR           # PEM/API key profile name
     locations:
-      dev-env:
-        compartment_id: ocid1.compartment.oc1...
-        vault_id: ocid1.vault.oc1...
-        secrets:
-          - github-services
-          - openai-services
+      dev-env:                 # LOCATION ID — referenced by sops.keys.*.location and imports.*.location
+        compartment_id: ocid1.compartment.oc1..aaaa...
+        vault_id: ocid1.vault.oc1..aaaa...
+        secrets:               # BUNDLE ALLOWLIST — OCI object names containing dotenv vars (NOT age keys)
+          - example-bundle-a   # WHY listed: imports[].vars can pull GH_TOKEN from this bundle
+          - example-bundle-b
+          - example-bundle-c
+          - sops-age-key-example
+
+# sops — age bootstrap (keys.txt) + encrypted env file paths (.env.sops)
+# WHY: separate from providers; controls SOPS decrypt + elr sops sync/source/remove
+sops:
+  keys_file: ~/.config/sops/age/keys.txt   # WHY: one master age key file on disk for SOPS_AGE_KEY_FILE
+  keys:
+    default:                  # catalog_id — `elr sops sync default`, `elr sops remove default`
+      location: dev-env
+      key: sops-age-key-example   # WHY .key not .secret: OCI Vault OBJECT NAME for age keys.txt payload
+    work:
+      location: dev-env
+      key: sops-age-key-work-example
+  env:                        # WHY: `elr <cmd>` decrypts ALL paths listed here into child env
+    app: .env.sops
+    deploy: ./deploy/.env.sops
+
+# imports — pull named KEYs from OCI dotenv bundles (locations.secrets allowlist)
+# WHY: vars not yet migrated to .env.sops; vars MUST be YAML list
+imports:
+  - provider: oci
+    location: dev-env
+    vars:
+      - GH_TOKEN
+      - OPENAI_API_KEY
+
+# local — plain env vars merged into child process (no Vault, no SOPS)
+local:
+  SOME_FLAG: "1"

@@ -19,12 +19,12 @@ class FakeProvider:
 class ResolverTests(unittest.TestCase):
     def test_resolves_local_and_secret_values(self):
         config = ResolvedConfig(
-            providers={"oci": {"locations": {"dev3top": {}}}},
+            providers={"oci": {"locations": {"dev-env": {}}}},
             local={"LOCAL_ONLY": "yes"},
             imports=[
                 ImportSpec(
                     provider="oci",
-                    location="dev3top",
+                    location="dev-env",
                     vars=("GH_TOKEN",),
                     source=Path("env.oci.yaml"),
                 )
@@ -37,11 +37,11 @@ class ResolverTests(unittest.TestCase):
 
     def test_print_plan_does_not_fetch(self):
         config = ResolvedConfig(
-            providers={"oci": {"locations": {"dev3top": {}}}},
+            providers={"oci": {"locations": {"dev-env": {}}}},
             imports=[
                 ImportSpec(
                     provider="oci",
-                    location="dev3top",
+                    location="dev-env",
                     vars=("GH_TOKEN",),
                     source=Path("env.oci.yaml"),
                 )

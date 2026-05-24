@@ -18,6 +18,13 @@ class OciSecretProvider:
         self._secret_cache: dict[tuple[str, str, str], str] = {}
         self._bundle_cache: dict[tuple[str, str, str], dict[str, str]] = {}
 
+    def fetch_raw_secret(self, location_name: str, secret_name: str) -> str:
+        location = self.locations.get(location_name)
+        if not isinstance(location, dict):
+            raise ConfigError(f"OCI location {location_name!r} is not configured")
+        secret_id = self._lookup_secret_id(location, secret_name, required=True)
+        return self._fetch_secret_value(secret_id, secret_name)
+
     def resolve_import(self, spec: ImportSpec) -> dict[str, str]:
         location = self.locations.get(spec.location)
         if not isinstance(location, dict):
@@ -68,8 +75,12 @@ class OciSecretProvider:
 
     def _load_allowed_secret_values(self, location: dict[str, Any]) -> dict[str, str]:
         secrets = location.get("secrets")
+        if secrets is None:
+            secrets = []
         if not isinstance(secrets, list) or not all(isinstance(item, str) for item in secrets):
-            raise ConfigError("OCI location requires secrets list")
+            raise ConfigError("OCI location secrets must be a list of strings when present")
+        if not secrets:
+            return {}
 
         values: dict[str, str] = {}
         for secret_name in secrets:

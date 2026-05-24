@@ -14,3 +14,8 @@ build/
 .oci/
 *.pem
 *.key
+age-key.txt
+keys.txt
+**/age-key.txt
+**/keys.txt
+**/age-keygen.log

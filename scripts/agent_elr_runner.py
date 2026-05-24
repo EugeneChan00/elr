@@ -24,6 +24,7 @@ from pathlib import Path
 from elr.config import ResolvedConfig, load_config
 from elr.errors import ElrError
 from elr.resolver import resolve_env
+from elr.sops import age_key_present, build_run_env, print_config_plan, sync_all_age_keys
 
 DEFAULT_MANIFEST = Path("~/.agents/env.oci.yaml")
 
@@ -39,14 +40,23 @@ def load_agent_config(manifest: Path | str) -> ResolvedConfig:
     return load_config(str(manifest), include_project=False)
 
 
-def resolve_agent_env(manifest: Path | str | None = None, *, fetch: bool = True) -> dict[str, str]:
+def resolve_agent_env(
+    manifest: Path | str | None = None,
+    *,
+    fetch: bool = True,
+    no_sync: bool = False,
+) -> dict[str, str]:
     path = Path(manifest).expanduser() if manifest else default_manifest_path()
     if not path.is_file():
         raise ElrError(f"agent manifest not found: {path}")
 
     config = load_agent_config(path)
-    resolution = resolve_env(config, fetch=fetch)
-    return resolution.values
+    if fetch and not no_sync and config.sops_keys and not age_key_present(config.keys_file):
+        sync_all_age_keys(config)
+
+    if fetch:
+        return build_run_env(config, fetch_imports=True)
+    return build_run_env(config, fetch_imports=False)
 
 
 def apply_agent_env(values: dict[str, str]) -> None:
@@ -82,6 +92,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="fetch secrets and update os.environ in this process, then exit",
     )
     parser.add_argument(
+        "--no-sync",
+        action="store_true",
+        help="do not fetch missing age keys from OCI Vault",
+    )
+    parser.add_argument(
         "cmd",
         nargs=argparse.REMAINDER,
         help="[--] <command> [args...]; omit with --load-only to bootstrap the current process",
@@ -95,14 +110,11 @@ def _parse_command(raw: list[str]) -> list[str]:
     return raw
 
 
-def _print_plan(manifest: Path, fetch: bool) -> int:
+def _print_plan(manifest: Path) -> int:
     config = load_agent_config(manifest)
-    resolution = resolve_env(config, fetch=fetch)
-    print(f"Agent manifest: {manifest}")
-    print("Config files:")
-    for path in config.loaded_files:
-        print(f"  - {path}")
-    print("Variables:")
+    print_config_plan(config)
+    resolution = resolve_env(config, fetch=False)
+    print("Import variables:")
     if not resolution.plan:
         print("  (none)")
         return 0
@@ -125,10 +137,10 @@ def main(argv: list[str] | None = None) -> int:
             raise ElrError(f"agent manifest not found: {manifest}")
 
         if args.print_plan:
-            return _print_plan(manifest, fetch=False)
+            return _print_plan(manifest)
 
         command = _parse_command(args.cmd)
-        values = resolve_agent_env(manifest, fetch=True)
+        values = resolve_agent_env(manifest, fetch=True, no_sync=args.no_sync)
 
         if args.load_only:
             apply_agent_env(values)

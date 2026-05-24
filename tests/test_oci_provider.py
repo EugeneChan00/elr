@@ -14,10 +14,10 @@ class OciProviderTests(unittest.TestCase):
         provider = OciSecretProvider(
             {
                 "locations": {
-                    "dev3top": {
+                    "dev-env": {
                         "compartment_id": "compartment",
                         "vault_id": "vault",
-                        "secrets": ["github-services"],
+                        "secrets": ["example-bundle-a"],
                     }
                 }
             }
@@ -27,7 +27,7 @@ class OciProviderTests(unittest.TestCase):
         values = provider.resolve_import(
             ImportSpec(
                 provider="oci",
-                location="dev3top",
+                location="dev-env",
                 vars=("GH_TOKEN",),
                 source=__file__,
             )
@@ -39,10 +39,10 @@ class OciProviderTests(unittest.TestCase):
         provider = OciSecretProvider(
             {
                 "locations": {
-                    "dev3top": {
+                    "dev-env": {
                         "compartment_id": "compartment",
                         "vault_id": "vault",
-                        "secrets": ["github-services"],
+                        "secrets": ["example-bundle-a"],
                     }
                 }
             }
@@ -54,7 +54,7 @@ class OciProviderTests(unittest.TestCase):
             provider.resolve_import(
                 ImportSpec(
                     provider="oci",
-                    location="dev3top",
+                    location="dev-env",
                     vars=("MISSING",),
                     source=__file__,
                 )
@@ -64,10 +64,10 @@ class OciProviderTests(unittest.TestCase):
         provider = OciSecretProvider(
             {
                 "locations": {
-                    "dev3top": {
+                    "dev-env": {
                         "compartment_id": "compartment",
                         "vault_id": "vault",
-                        "secrets": ["github-services"],
+                        "secrets": ["example-bundle-a"],
                     }
                 }
             }
@@ -79,61 +79,80 @@ class OciProviderTests(unittest.TestCase):
         provider.resolve_import(
             ImportSpec(
                 provider="oci",
-                location="dev3top",
+                location="dev-env",
                 vars=("GH_TOKEN",),
                 source=__file__,
             )
         )
-        self.assertEqual(vaults.names, ["github-services"])
+        self.assertEqual(vaults.names, ["example-bundle-a"])
 
     def test_provider_skips_missing_allowed_bundle_names(self):
         provider = OciSecretProvider(
             {
                 "locations": {
-                    "dev3top": {
+                    "dev-env": {
                         "compartment_id": "compartment",
                         "vault_id": "vault",
-                        "secrets": ["github-services", "agent-service"],
+                        "secrets": ["example-bundle-a", "example-bundle-b"],
                     }
                 }
             }
         )
-        vaults = FakeVaultsClient(missing={"agent-service"})
+        vaults = FakeVaultsClient(missing={"example-bundle-b"})
         provider._vaults_client = vaults
         provider._secrets_client = FakeSecretsClient()
 
         values = provider.resolve_import(
             ImportSpec(
                 provider="oci",
-                location="dev3top",
+                location="dev-env",
                 vars=("GH_TOKEN",),
                 source=__file__,
             )
         )
 
         self.assertEqual(values["GH_TOKEN"], "secret-value")
-        self.assertEqual(vaults.names, ["github-services", "agent-service"])
+        self.assertEqual(vaults.names, ["example-bundle-a", "example-bundle-b"])
+
+    def test_fetch_raw_secret_returns_unparsed_bundle(self):
+        provider = OciSecretProvider(
+            {
+                "locations": {
+                    "dev-env": {
+                        "compartment_id": "compartment",
+                        "vault_id": "vault",
+                        "secrets": ["sops-age-key-example"],
+                    }
+                }
+            }
+        )
+        provider._vaults_client = FakeVaultsClient()
+        provider._secrets_client = FakeSecretsClient(
+            payload=b"# created: 2026\nAGE-SECRET-KEY-1abc\n"
+        )
+        raw = provider.fetch_raw_secret("dev-env", "sops-age-key-example")
+        self.assertIn("AGE-SECRET-KEY-1abc", raw)
 
     def test_provider_fails_when_requested_var_only_in_missing_bundle(self):
         provider = OciSecretProvider(
             {
                 "locations": {
-                    "dev3top": {
+                    "dev-env": {
                         "compartment_id": "compartment",
                         "vault_id": "vault",
-                        "secrets": ["agent-service"],
+                        "secrets": ["example-bundle-b"],
                     }
                 }
             }
         )
-        provider._vaults_client = FakeVaultsClient(missing={"agent-service"})
+        provider._vaults_client = FakeVaultsClient(missing={"example-bundle-b"})
         provider._secrets_client = FakeSecretsClient()
 
         with self.assertRaises(SecretResolutionError) as exc:
             provider.resolve_import(
                 ImportSpec(
                     provider="oci",
-                    location="dev3top",
+                    location="dev-env",
                     vars=("AGENT_TOKEN",),
                     source=__file__,
                 )
@@ -156,8 +175,11 @@ class FakeVaultsClient:
 
 
 class FakeSecretsClient:
+    def __init__(self, payload: bytes | None = None):
+        self.payload = payload or b"GH_TOKEN=secret-value\nUNREQUESTED=yes\n"
+
     def get_secret_bundle(self, **_kwargs):
-        content = base64.b64encode(b"GH_TOKEN=secret-value\nUNREQUESTED=yes\n").decode("ascii")
+        content = base64.b64encode(self.payload).decode("ascii")
         bundle_content = types.SimpleNamespace(content=content)
         data = types.SimpleNamespace(secret_bundle_content=bundle_content)
         return types.SimpleNamespace(data=data)

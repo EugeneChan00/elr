@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from elr.config import find_project_config, load_config
 from elr.errors import ConfigError
@@ -22,11 +23,11 @@ providers:
     auth:
       mode: config_file
     locations:
-      dev3top:
+      dev-env:
         compartment_id: comp
         vault_id: vault
         secrets:
-          - github-services
+          - example-bundle-a
 """,
                 encoding="utf-8",
             )
@@ -36,7 +37,7 @@ version: 1
 imports:
   - {user}
   - provider: oci
-    location: dev3top
+    location: dev-env
     vars:
       - GH_TOKEN
 local:
@@ -58,13 +59,14 @@ local:
 version: 1
 imports:
   - provider: oci
-    location: dev3top
+    location: dev-env
     vars: [GH_TOKEN]
 """,
                 encoding="utf-8",
             )
-            with self.assertRaises(ConfigError):
-                load_config(str(project))
+            with patch("elr.config.default_config_paths", return_value=[project]):
+                with self.assertRaises(ConfigError):
+                    load_config(str(project))
 
     def test_project_config_search_stops_at_git_root(self):
         with tempfile.TemporaryDirectory() as tmp:
