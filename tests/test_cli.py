@@ -15,7 +15,7 @@ class CliTests(unittest.TestCase):
             with redirect_stdout(output):
                 cli.main(["--version"])
         self.assertEqual(exc.exception.code, 0)
-        self.assertIn("elr 0.1.0", output.getvalue())
+        self.assertIn("elr 0.2.0", output.getvalue())
 
     def test_no_env_print_plan(self):
         output = io.StringIO()

@@ -114,6 +114,25 @@ class OciProviderTests(unittest.TestCase):
         self.assertEqual(values["GH_TOKEN"], "secret-value")
         self.assertEqual(vaults.names, ["github-services", "agent-service"])
 
+    def test_fetch_raw_secret_returns_unparsed_bundle(self):
+        provider = OciSecretProvider(
+            {
+                "locations": {
+                    "dev3top": {
+                        "compartment_id": "compartment",
+                        "vault_id": "vault",
+                        "secrets": ["sops-age-key"],
+                    }
+                }
+            }
+        )
+        provider._vaults_client = FakeVaultsClient()
+        provider._secrets_client = FakeSecretsClient(
+            payload=b"# created: 2026\nAGE-SECRET-KEY-1abc\n"
+        )
+        raw = provider.fetch_raw_secret("dev3top", "sops-age-key")
+        self.assertIn("AGE-SECRET-KEY-1abc", raw)
+
     def test_provider_fails_when_requested_var_only_in_missing_bundle(self):
         provider = OciSecretProvider(
             {
@@ -156,8 +175,11 @@ class FakeVaultsClient:
 
 
 class FakeSecretsClient:
+    def __init__(self, payload: bytes | None = None):
+        self.payload = payload or b"GH_TOKEN=secret-value\nUNREQUESTED=yes\n"
+
     def get_secret_bundle(self, **_kwargs):
-        content = base64.b64encode(b"GH_TOKEN=secret-value\nUNREQUESTED=yes\n").decode("ascii")
+        content = base64.b64encode(self.payload).decode("ascii")
         bundle_content = types.SimpleNamespace(content=content)
         data = types.SimpleNamespace(secret_bundle_content=bundle_content)
         return types.SimpleNamespace(data=data)

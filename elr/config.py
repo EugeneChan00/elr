@@ -77,7 +77,7 @@ def default_config_paths(
         paths.append(SYSTEM_CONFIG)
     if USER_CONFIG.is_file():
         paths.append(USER_CONFIG)
-    if include_project:
+    if include_project and not explicit_env:
         project = find_project_config()
         if project:
             paths.append(project)

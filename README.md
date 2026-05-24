@@ -1,8 +1,9 @@
 # ELR
 
-ELR is a lightweight OCI-backed environment runner. It resolves env vars from
-private provider configuration plus project manifests, exports values only into
-the child process environment, and writes no plaintext `.env` file.
+ELR is a lightweight OCI-backed environment runner. It can bootstrap SOPS age
+keys from Oracle Vault (recommended for multi-device setups) or resolve env vars
+from private provider configuration plus project manifests for legacy
+`elr -- <cmd>` workflows.
 
 ## Install
 
@@ -26,7 +27,75 @@ pip install -e .
 
 The runtime package depends on `oci` and `PyYAML`.
 
-## Private Config
+## SOPS bootstrap (recommended)
+
+Use Oracle Vault for one secret only — the SOPS age private key — and keep all
+application secrets in an encrypted `.env.sops` in git. Daily workflows use
+`direnv` + `sops`, not `elr --`.
+
+| Layer | Responsibility |
+| --- | --- |
+| PEM / OCI API key | Authenticate to Oracle Vault |
+| Oracle Vault | Store `sops-age-key` (age private key) |
+| ELR | `elr age sync` / `elr sops store` → `~/.config/sops/age/keys.txt` |
+| SOPS | Encrypt/decrypt `.env.sops` (MC_HOST_*, API keys, …) |
+| direnv | Decrypt on `cd` into the project |
+
+### Private config (SOPS-only)
+
+```yaml
+# ~/.config/elr/config.yaml
+version: 1
+
+sops:
+  age_key_file: ~/.config/sops/age/keys.txt
+  location: dev-env
+  secret: sops-age-key
+  env_file: .env.sops
+
+providers:
+  oci:
+    auth:
+      mode: config_file
+      config_file: ~/.oci/config
+      profile: ELR
+    locations:
+      dev-env:
+        compartment_id: ocid1.compartment.oc1...
+        vault_id: ocid1.vault.oc1...
+        secrets:
+          - sops-age-key
+```
+
+Set `auth.region` to your OCI home region (see `elr profile add` / `ELR_OCI_REGION`).
+Store the vault secret as full `keys.txt` output from `age-keygen`, a single
+`AGE-SECRET-KEY-1...` line, or dotenv `SOPS_AGE_KEY=...`.
+
+### Commands
+
+```bash
+elr age sync                              # PEM → Vault → ~/.config/sops/age/keys.txt
+elr sops store                            # alias for age sync
+eval "$(elr sops source)"                 # export SOPS_AGE_KEY_FILE in current shell
+eval "$(elr sops source --sync)"           # fetch key first if missing
+elr sops -- mc ls my-alias/bucket         # one-shot: sync + sops exec-env .env.sops
+```
+
+### direnv
+
+See `examples/envrc.sops` for a `.envrc` that runs `elr age sync` when the key
+file is missing, then sources decrypted dotenv from `.env.sops`.
+
+```bash
+cd project
+mc ls oci-phoenix/quick-finance   # MC_HOST_* from sops, not elr --
+```
+
+You do not need Oracle for SOPS itself — the age key can live on each device,
+NAS over Tailscale, or a password manager. Oracle + ELR is useful when you want
+IAM, audit, and one canonical key fetched per device with PEM bootstrap.
+
+## Private Config (legacy env injection)
 
 Keep provider identity outside public repos:
 

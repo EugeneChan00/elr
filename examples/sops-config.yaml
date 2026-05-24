@@ -1,0 +1,24 @@
+version: 1
+
+# SOPS bootstrap: ELR fetches only the age private key from OCI Vault.
+# Application secrets live in the repo as .env.sops (encrypted with age).
+
+sops:
+  age_key_file: ~/.config/sops/age/keys.txt
+  location: dev-env
+  secret: sops-age-key
+  env_file: .env.sops
+
+providers:
+  oci:
+    auth:
+      mode: config_file
+      config_file: ~/.oci/config
+      profile: ELR
+
+    locations:
+      dev-env:
+        compartment_id: ocid1.compartment.oc1...
+        vault_id: ocid1.vault.oc1...
+        secrets:
+          - sops-age-key
