@@ -176,3 +176,51 @@ elr -- echo "$OPENAI_API_KEY"
 ```
 
 because the parent shell expands `$OPENAI_API_KEY` before `elr` starts.
+
+## Agent Session Env (`~/.agents`)
+
+For PI or other agent sessions, keep a fixed manifest at
+`~/.agents/env.oci.yaml` and load it through the cross-platform Python runner
+(works on Windows via `uv run`, no shell script required).
+
+```yaml
+# ~/.agents/env.oci.yaml
+version: 1
+
+imports:
+  - provider: oci
+    location: dev-env
+    vars:
+      - CLI_PROXY_URL
+      - CLI_PROXY_API_KEY
+      - OPENAI_API_KEY
+
+local: {}
+```
+
+Put both the proxy URL and API key in the OCI secret bundle (dotenv format):
+
+```dotenv
+CLI_PROXY_URL=https://proxy.example.com/v1
+CLI_PROXY_API_KEY=sk-...
+OPENAI_API_KEY=sk-...
+```
+
+Copy the standalone uv project template from `examples/agents/` into
+`~/.agents/`, then at PI session startup either bootstrap the current process
+or wrap the agent command:
+
+```bash
+cd ~/.agents
+uv run runner.py --print-plan
+uv run runner.py --load-only
+uv run runner.py -- <pi-agent-command> [args...]
+```
+
+From the ELR repo checkout:
+
+```bash
+uv run scripts/agent_elr_runner.py -- <pi-agent-command> [args...]
+```
+
+Set `AGENT_ENV_FILE` to override the default manifest path.
