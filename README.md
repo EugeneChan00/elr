@@ -41,18 +41,21 @@ application secrets in an encrypted `.env.sops` in git. Daily workflows use
 | SOPS | Encrypt/decrypt `.env.sops` (MC_HOST_*, API keys, …) |
 | direnv | Decrypt on `cd` into the project |
 
-### Layered manifests (same idea as `env.oci.yaml`)
+### Layered manifests — `env.oci.yaml` is canonical
+
+One manifest format for both legacy env injection and SOPS key sync. ELR loads the
+same file stack everywhere:
 
 | File | Role |
 | --- | --- |
 | `/etc/elr/config.yaml` | System baseline: `providers` + `sops.keys` catalog |
 | `~/.config/elr/config.yaml` | User overlay: more keys, auth, defaults |
-| `sops.oci.yaml` (repo root) | Project overlay: `sync.key` picks which catalog entry this repo uses |
+| `env.oci.yaml` (repo root) | Project overlay: `sops.sync` picks catalog entry + `env_file` |
 
-Later files **merge** `providers` and `sops.keys` (deep merge). The repo file only
-needs the public part — which key id and which `.env.sops` file.
+Later files **merge** `providers` and `sops.keys` (deep merge). The repo
+`env.oci.yaml` can be public — only key ids and paths, no secret values.
 
-**Baseline** (`examples/sops-config.yaml`):
+**User baseline** (`examples/user-config.yaml`):
 
 ```yaml
 sops:
@@ -70,16 +73,18 @@ providers:
   oci: { ... }
 ```
 
-**Repo overlay** (`examples/sops.oci.yaml`):
+**Repo** (`examples/env.oci.yaml`):
 
 ```yaml
-sync:
-  key: work
-  env_file: .env.sops
+sops:
+  sync:
+    key: work
+    env_file: .env.sops
 ```
 
 `elr sops sync` in that repo fetches `sops-age-key-work` → `~/.config/sops/age/work.txt`.
 Flat `sops: { secret, age_key_file, ... }` in user config still maps to `keys.default`.
+Legacy `imports` / `local` in the same file still work for `elr -- <cmd>`.
 
 Set `auth.region` on the OCI provider (see `elr profile add`). Vault secret body can be
 full `keys.txt`, a single `AGE-SECRET-KEY-1...` line, or `SOPS_AGE_KEY=...`.
@@ -87,7 +92,7 @@ full `keys.txt`, a single `AGE-SECRET-KEY-1...` line, or `SOPS_AGE_KEY=...`.
 ### Commands
 
 ```bash
-elr sops sync                  # active key for this repo (from sops.oci.yaml)
+elr sops sync                  # active key for this repo (from env.oci.yaml sops.sync)
 elr sops sync work             # named key from catalog
 elr sops sync --all            # every key in sops.keys
 elr sops sync --print-plan     # show resolved keys/paths (no Vault fetch)

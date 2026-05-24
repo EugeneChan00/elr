@@ -1,10 +1,26 @@
 version: 1
 
+# Private user baseline (~/.config/elr/config.yaml) — providers + sops.keys catalog.
+
+sops:
+  defaults:
+    key: default
+    env_file: .env.sops
+    age_key_dir: ~/.config/sops/age
+  keys:
+    default:
+      provider: oci
+      location: dev-env
+      secret: sops-age-key
+    work:
+      provider: oci
+      location: dev-env
+      secret: sops-age-key-work
+
 providers:
   oci:
     auth:
       mode: config_file
-      region: us-phoenix-1
       config_file: ~/.oci/config
       profile: ELR
 
@@ -13,5 +29,7 @@ providers:
         compartment_id: ocid1.compartment.oc1...
         vault_id: ocid1.vault.oc1...
         secrets:
+          - sops-age-key
+          - sops-age-key-work
           - github-services
           - openai-services

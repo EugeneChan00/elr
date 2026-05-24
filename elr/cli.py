@@ -10,6 +10,7 @@ from .errors import ElrError
 from .profile import add_profile
 from .resolver import resolve_env
 from .sops import (
+    _settings_from_spec,
     age_key_present,
     exec_with_sops,
     load_sops_settings,
@@ -93,7 +94,7 @@ def _sops_sync(argv: list[str]) -> int:
         action="store_true",
         help="show resolved sops keys and paths without fetching secrets",
     )
-    parser.add_argument("-f", "--sops-config", help="explicit sops/env config YAML path")
+    parser.add_argument("-e", "--env", help="explicit env.oci.yaml / config path")
     parser.add_argument("--force", action="store_true", help="overwrite existing age key file(s)")
     parser.add_argument("--location", help="override OCI location for the selected key")
     parser.add_argument("--secret", help="override OCI vault secret name")
@@ -102,14 +103,14 @@ def _sops_sync(argv: list[str]) -> int:
     try:
         if args.print_plan:
             _, resolved = load_sops_settings(
-                explicit_config=args.sops_config,
+                explicit_env=args.env,
                 key_id=args.key,
             )
             print_sops_plan(resolved, active_only=not args.all and not args.key)
             return 0
 
         if args.all:
-            _, resolved = load_sops_settings(explicit_config=args.sops_config)
+            _, resolved = load_sops_settings(explicit_env=args.env)
             for key_id, spec in resolved.keys.items():
                 settings = _settings_from_spec(spec)
                 existed = age_key_present(settings.age_key_file)
@@ -118,7 +119,7 @@ def _sops_sync(argv: list[str]) -> int:
             return 0
 
         settings, resolved = load_sops_settings(
-            explicit_config=args.sops_config,
+            explicit_env=args.env,
             key_id=args.key,
             age_key_file=args.age_key_file,
             location=args.location,
@@ -159,7 +160,7 @@ def _sops_help() -> int:
         "usage: elr sops {sync|source|exec} ...\n"
         "       elr sops -- <command> [args...]\n"
         "\n"
-        "  sync     fetch age key(s) from OCI Vault (repo sops.oci.yaml selects active key)\n"
+        "  sync     fetch age key(s) from OCI Vault (repo env.oci.yaml sops.sync selects key)\n"
         "  source   print shell exports for SOPS_AGE_KEY_FILE (use: eval \"$(elr sops source)\")\n"
         "  exec     sync age key and run: sops exec-env .env.sops -- <command>\n",
         file=sys.stderr,

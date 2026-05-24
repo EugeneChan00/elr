@@ -14,7 +14,7 @@ class SopsConfigTests(unittest.TestCase):
             root = Path(tmp)
             system = root / "system.yaml"
             user = root / "user.yaml"
-            project = root / "sops.oci.yaml"
+            project = root / "env.oci.yaml"
 
             system.write_text(
                 """
@@ -45,17 +45,15 @@ sops:
             project.write_text(
                 """
 version: 1
-sync:
-  key: work
-  env_file: .env.sops
+sops:
+  sync:
+    key: work
+    env_file: .env.sops
 """,
                 encoding="utf-8",
             )
 
-            with patch(
-                "elr.sops_config.default_sops_config_paths",
-                return_value=[system, user, project],
-            ):
+            with patch("elr.sops_config.default_config_paths", return_value=[system, user, project]):
                 resolved = load_sops_config()
 
             self.assertEqual(resolved.active_key, "work")
@@ -84,7 +82,7 @@ sops:
 """,
                 encoding="utf-8",
             )
-            with patch("elr.sops_config.default_sops_config_paths", return_value=[user]):
+            with patch("elr.sops_config.default_config_paths", return_value=[user]):
                 resolved = load_sops_config()
             self.assertEqual(resolved.active_key, "default")
             self.assertEqual(resolved.keys["default"].secret, "sops-age-key")

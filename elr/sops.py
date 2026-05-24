@@ -29,7 +29,7 @@ class SopsSettings:
 
 def load_sops_settings(
     *,
-    explicit_config: str | None = None,
+    explicit_env: str | None = None,
     include_project: bool = True,
     key_id: str | None = None,
     age_key_file: str | None = None,
@@ -39,7 +39,7 @@ def load_sops_settings(
     env_file: str | None = None,
 ) -> tuple[SopsSettings, ResolvedSopsConfig]:
     resolved = load_sops_config(
-        explicit_config,
+        explicit_env,
         include_project=include_project,
         key_id=key_id,
     )

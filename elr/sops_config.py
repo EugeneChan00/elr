@@ -5,17 +5,14 @@ from pathlib import Path
 from typing import Any
 
 from .config import (
-    SYSTEM_CONFIG,
     USER_CONFIG,
     _deep_merge,
     _resolve_relative_path,
-    expand_path,
-    find_git_root,
+    default_config_paths,
     load_yaml_file,
 )
 from .errors import ConfigError
 
-PROJECT_SOPS_CONFIG_NAMES = ("sops.oci.yaml", ".sops.oci.yaml")
 DEFAULT_KEY_ID = "default"
 DEFAULT_AGE_KEY_DIR = Path("~/.config/sops/age")
 DEFAULT_SOPS_ENV_FILE = ".env.sops"
@@ -43,71 +40,16 @@ class ResolvedSopsConfig:
     loaded_files: list[Path] = field(default_factory=list)
 
 
-def find_project_sops_config(start: Path | None = None) -> Path | None:
-    cur = (start or Path.cwd()).resolve()
-    git_root = find_git_root(cur)
-    directories = _search_directories(cur, git_root)
-    for directory in directories:
-        for name in PROJECT_SOPS_CONFIG_NAMES:
-            candidate = directory / name
-            if candidate.is_file():
-                return candidate
-    return None
-
-
-def _search_directories(start: Path, stop: Path | None) -> tuple[Path, ...]:
-    directories = (start, *start.parents)
-    if stop is None:
-        return directories
-    result: list[Path] = []
-    for directory in directories:
-        result.append(directory)
-        if directory == stop:
-            break
-    return tuple(result)
-
-
-def default_sops_config_paths(
-    explicit: str | None = None,
-    *,
-    include_project: bool = True,
-) -> list[Path]:
-    paths: list[Path] = []
-    if SYSTEM_CONFIG.is_file():
-        paths.append(SYSTEM_CONFIG)
-    if USER_CONFIG.is_file():
-        paths.append(USER_CONFIG)
-    if include_project and not explicit:
-        project = find_project_sops_config()
-        if project:
-            paths.append(project)
-    if explicit:
-        paths.append(expand_path(explicit))
-    return _dedupe_paths(paths)
-
-
-def _dedupe_paths(paths: list[Path]) -> list[Path]:
-    result: list[Path] = []
-    seen: set[Path] = set()
-    for path in paths:
-        resolved = path.expanduser().resolve()
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        result.append(resolved)
-    return result
-
-
 def load_sops_config(
-    explicit: str | None = None,
+    explicit_env: str | None = None,
     *,
     include_project: bool = True,
     key_id: str | None = None,
 ) -> ResolvedSopsConfig:
-    paths = default_sops_config_paths(explicit, include_project=include_project)
+    paths = default_config_paths(explicit_env, include_project=include_project)
     if not paths:
         raise ConfigError(
-            "no sops config found; create ~/.config/elr/config.yaml or sops.oci.yaml"
+            "no config found; create ~/.config/elr/config.yaml or env.oci.yaml"
         )
 
     merged_providers: dict[str, Any] = {}
@@ -176,7 +118,7 @@ def _load_sops_file(
 ) -> None:
     path = path.expanduser().resolve()
     if path in seen:
-        raise ConfigError(f"cyclic sops config import at {path}")
+        raise ConfigError(f"cyclic config import at {path}")
     seen.add(path)
     data = load_yaml_file(path)
 
@@ -203,11 +145,15 @@ def _load_sops_file(
             defaults=defaults,
             source=path,
         )
+        nested_sync = sops_section.get("sync")
+        if isinstance(nested_sync, dict):
+            sync_block.clear()
+            sync_block.update(nested_sync)
 
-    project_sync = data.get("sync")
-    if isinstance(project_sync, dict):
+    top_level_sync = data.get("sync")
+    if isinstance(top_level_sync, dict):
         sync_block.clear()
-        sync_block.update(project_sync)
+        sync_block.update(top_level_sync)
 
     loaded_files.append(path)
     seen.remove(path)
@@ -224,12 +170,10 @@ def _config_imports(imports_field: Any, source: Path) -> list[Path]:
         if isinstance(item, str):
             paths.append(_resolve_relative_path(item, source))
             continue
-        if isinstance(item, dict) and "sops" in item:
+        if isinstance(item, dict) and ("provider" in item or "sops" in item):
             continue
         if isinstance(item, dict):
-            raise ConfigError(
-                f"unsupported import entry in {source}; use a config path string or sops key reference in sync"
-            )
+            raise ConfigError(f"unsupported import entry in {source}")
     return paths
 
 
@@ -242,7 +186,9 @@ def _merge_sops_section(
 ) -> None:
     nested_defaults = section.get("defaults")
     if isinstance(nested_defaults, dict):
-        defaults.update(nested_defaults)
+        for key, value in nested_defaults.items():
+            if key != "sync":
+                defaults[key] = value
 
     keys = section.get("keys")
     if isinstance(keys, dict):
@@ -265,8 +211,6 @@ def _merge_sops_section(
         )
         if section.get("env_file"):
             defaults["env_file"] = section["env_file"]
-        if section.get("age_key_file"):
-            pass
 
 
 def _is_flat_legacy_sops(section: dict[str, Any]) -> bool:
