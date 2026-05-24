@@ -1,0 +1,19 @@
+# Copy this directory layout to ~/.agents/ for a standalone uv project.
+#
+#   mkdir -p ~/.agents
+#   cp examples/agents/env.oci.yaml ~/.agents/
+#   cp examples/agents/pyproject.toml ~/.agents/
+#   cp scripts/agent_elr_runner.py ~/.agents/runner.py
+#   cd ~/.agents && uv sync
+#
+# PI session startup:
+#   uv run runner.py -- <pi-agent-command> [args...]
+
+[project]
+name = "agents-env"
+version = "0.0.0"
+description = "Agent session env loader for ELR"
+requires-python = ">=3.10"
+dependencies = [
+  "elr @ git+https://github.com/EugeneChan00/elr@v0.1.0",
+]

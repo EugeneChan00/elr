@@ -67,15 +67,20 @@ def _search_directories(start: Path, stop: Path | None) -> tuple[Path, ...]:
     return tuple(result)
 
 
-def default_config_paths(explicit_env: str | None = None) -> list[Path]:
+def default_config_paths(
+    explicit_env: str | None = None,
+    *,
+    include_project: bool = True,
+) -> list[Path]:
     paths: list[Path] = []
     if SYSTEM_CONFIG.is_file():
         paths.append(SYSTEM_CONFIG)
     if USER_CONFIG.is_file():
         paths.append(USER_CONFIG)
-    project = find_project_config()
-    if project:
-        paths.append(project)
+    if include_project:
+        project = find_project_config()
+        if project:
+            paths.append(project)
     if explicit_env:
         paths.append(expand_path(explicit_env))
     return _dedupe_paths(paths)
@@ -106,8 +111,8 @@ def load_yaml_file(path: Path) -> dict[str, Any]:
     return data
 
 
-def load_config(explicit_env: str | None = None) -> ResolvedConfig:
-    paths = default_config_paths(explicit_env)
+def load_config(explicit_env: str | None = None, *, include_project: bool = True) -> ResolvedConfig:
+    paths = default_config_paths(explicit_env, include_project=include_project)
     if not paths:
         raise ConfigError("no env config found; pass --env or use --no-env")
 
