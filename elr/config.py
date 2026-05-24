@@ -16,7 +16,7 @@ USER_CONFIG = Path("~/.config/elr/config.yaml").expanduser()
 DEFAULT_KEYS_FILE = Path("~/.config/sops/age/keys.txt")
 DEFAULT_OCI_LOCATION = "dev-env"
 DEFAULT_OCI_PROVIDER = "oci"
-DEFAULT_VAULT_KEY = "sops-age-keys"
+DEFAULT_VAULT_KEY = "sops-age-key-example"
 
 LAYER_ETC = 0
 LAYER_USER = 1

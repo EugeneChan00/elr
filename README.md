@@ -79,7 +79,7 @@ Oracle Vault stores the age private key; application secrets live in encrypted
 | Layer | Responsibility |
 | --- | --- |
 | PEM / OCI API key | Authenticate to Oracle Vault |
-| Oracle Vault | Store age key object (e.g. `sops-age-keys`) |
+| Oracle Vault | Store age key object (e.g. `sops-age-key-example`) |
 | ELR | `elr sops sync` → master `sops.keys_file` (default `~/.config/sops/age/keys.txt`) |
 | SOPS | Encrypt/decrypt `.env.sops` |
 | direnv | Optional interactive shell decrypt (see `examples/envrc.sops`) |
@@ -154,8 +154,8 @@ providers:
         compartment_id: ocid1.compartment.oc1...
         vault_id: ocid1.vault.oc1...
         secrets:
-          - github-services
-          - openai-services
+          - example-bundle-a
+          - example-bundle-b
 ```
 
 `mode: instance_principal` is also supported for OCI instances.
@@ -166,7 +166,7 @@ Create or update the private OCI profile from environment values:
 ELR_OCI_REGION=[REDACTED] \
 ELR_OCI_COMPARTMENT_ID=ocid1.compartment.oc1... \
 ELR_OCI_VAULT_ID=ocid1.vault.oc1... \
-ELR_OCI_SECRETS=github-services,openai-services \
+ELR_OCI_SECRETS=example-bundle-a,example-bundle-b \
 elr profile add
 ```
 

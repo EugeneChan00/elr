@@ -22,7 +22,7 @@ class ProfileTests(unittest.TestCase):
 
             data = yaml.safe_load(config.read_text(encoding="utf-8"))
             location = data["providers"]["oci"]["locations"]["dev-env"]
-            self.assertEqual(location["secrets"], ["github-services", "openai-services"])
+            self.assertEqual(location["secrets"], ["example-bundle-a", "example-bundle-b"])
             self.assertEqual(_mode(config.parent), 0o700)
             self.assertEqual(_mode(config), 0o600)
 
@@ -78,7 +78,7 @@ providers:
             env_file = Path(tmp) / "elr.env"
             env_file.write_text(
                 """
-ELR_OCI_REGION=us-ashburn-1
+ELR_OCI_REGION=us-example-1
 ELR_OCI_COMPARTMENT_ID=file-comp
 ELR_OCI_VAULT_ID=file-vault
 ELR_OCI_SECRETS=file-services
@@ -104,7 +104,7 @@ ELR_OCI_SECRETS=file-services
             env_file = Path(tmp) / "elr.env"
             env_file.write_text(
                 """
-export ELR_OCI_REGION='us-ashburn-1'
+export ELR_OCI_REGION='us-example-1'
 ELR_OCI_COMPARTMENT_ID="file-comp"
 ELR_OCI_VAULT_ID=file-vault
 ELR_OCI_SECRETS=file-services
@@ -115,14 +115,14 @@ ELR_OCI_SECRETS=file-services
             add_profile(config_path=config, from_env_file=str(env_file), environ={}, stdin=NonTty())
 
             data = yaml.safe_load(config.read_text(encoding="utf-8"))
-            self.assertEqual(data["providers"]["oci"]["auth"]["region"], "us-ashburn-1")
+            self.assertEqual(data["providers"]["oci"]["auth"]["region"], "us-example-1")
             location = data["providers"]["oci"]["locations"]["dev-env"]
             self.assertEqual(location["secrets"], ["file-services"])
 
     def test_prompts_for_missing_values_on_tty(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = Path(tmp) / "config.yaml"
-            answers = iter(["us-phoenix-1", "compartment", "vault", "github-services"])
+            answers = iter(["us-phoenix-1", "compartment", "vault", "example-bundle-a"])  # pragma: allowlist secret
 
             add_profile(
                 config_path=config,
@@ -223,7 +223,7 @@ def _env(**overrides):
         "ELR_OCI_REGION": "us-phoenix-1",
         "ELR_OCI_COMPARTMENT_ID": "compartment",
         "ELR_OCI_VAULT_ID": "vault",
-        "ELR_OCI_SECRETS": "github-services,openai-services",
+        "ELR_OCI_SECRETS": "example-bundle-a,example-bundle-b",
     }
     values.update(overrides)
     return values

@@ -28,16 +28,16 @@ providers:
       dev-env:
         compartment_id: comp
         vault_id: vault
-        secrets: [github-services, sops-age-keys]
+        secrets: [example-bundle-a, sops-age-key-example]
 sops:
   keys_file: ~/.config/sops/age/keys.txt
   keys:
     default:
       location: dev-env
-      key: sops-age-keys
+      key: sops-age-key-example
     work:
       location: dev-env
-      key: sops-age-key-work
+      key: sops-age-key-work-example
   env:
     app: .env.sops
 """,
@@ -61,8 +61,8 @@ sops:
             with patch("elr.config.default_config_paths", return_value=[system, user, project]):
                 resolved = load_sops_config()
 
-            self.assertEqual(resolved.sops_keys["default"].vault_key, "sops-age-keys")
-            self.assertEqual(resolved.sops_keys["work"].vault_key, "sops-age-key-work")
+            self.assertEqual(resolved.sops_keys["default"].vault_key, "sops-age-key-example")
+            self.assertEqual(resolved.sops_keys["work"].vault_key, "sops-age-key-work-example")
             self.assertEqual(resolved.sops_keys["my-repo"].vault_key, "sops-age-key-my-repo")
             aliases = {entry.alias for entry in resolved.sops_env}
             self.assertEqual(aliases, {"app", "deploy"})
@@ -80,9 +80,9 @@ providers:
       dev-env:
         compartment_id: c
         vault_id: v
-        secrets: [sops-age-keys]
+        secrets: [sops-age-key-example]
 sops:
-  secret: sops-age-keys
+  secret: sops-age-key-example
   location: dev-env
   keys_file: ~/.config/sops/age/keys.txt
 """,
@@ -91,7 +91,7 @@ sops:
             with patch("elr.config.default_config_paths", return_value=[user]):
                 resolved = load_sops_config()
             self.assertIn("default", resolved.sops_keys)
-            self.assertEqual(resolved.sops_keys["default"].vault_key, "sops-age-keys")
+            self.assertEqual(resolved.sops_keys["default"].vault_key, "sops-age-key-example")
             self.assertTrue(any("deprecated" in w for w in resolved.warnings))
 
     def test_deprecated_secret_alias_on_keys(self):

@@ -36,7 +36,7 @@ providers:
       {location}:
         compartment_id: comp-base
         vault_id: vault-base
-        secrets: [sops-age-keys]
+        secrets: [sops-age-key-example]
 """
 
 

@@ -10,14 +10,13 @@ providers:
       profile: ELR           # PEM/API key profile name
     locations:
       dev-env:                 # LOCATION ID — referenced by sops.keys.*.location and imports.*.location
-        compartment_id: ocid1.tenancy.oc1..aaaa...
-        vault_id: ocid1.vault.oc1.phx...
+        compartment_id: ocid1.compartment.oc1..aaaa...
+        vault_id: ocid1.vault.oc1..aaaa...
         secrets:               # BUNDLE ALLOWLIST — OCI object names containing dotenv vars (NOT age keys)
-          - github-services    # WHY listed: imports[].vars can pull GH_TOKEN from this bundle
-          - agent-service
-          - network-service
-          - buckets
-          - sops-age-keys      # optional; only if age payload also stored as named bundle
+          - example-bundle-a   # WHY listed: imports[].vars can pull GH_TOKEN from this bundle
+          - example-bundle-b
+          - example-bundle-c
+          - sops-age-key-example
 
 # sops — age bootstrap (keys.txt) + encrypted env file paths (.env.sops)
 # WHY: separate from providers; controls SOPS decrypt + elr sops sync/source/remove
@@ -26,10 +25,10 @@ sops:
   keys:
     default:                  # catalog_id — `elr sops sync default`, `elr sops remove default`
       location: dev-env
-      key: sops-age-keys      # WHY .key not .secret: OCI Vault OBJECT NAME for age keys.txt payload
+      key: sops-age-key-example   # WHY .key not .secret: OCI Vault OBJECT NAME for age keys.txt payload
     work:
       location: dev-env
-      key: sops-age-key-work
+      key: sops-age-key-work-example
   env:                        # WHY: `elr <cmd>` decrypts ALL paths listed here into child env
     app: .env.sops
     deploy: ./deploy/.env.sops

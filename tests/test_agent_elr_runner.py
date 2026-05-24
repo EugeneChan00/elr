@@ -72,8 +72,8 @@ providers:
       profile: ELR
     locations:
       dev-env:
-        compartment_id: ocid1.compartment
-        vault_id: ocid1.vault
+        compartment_id: ocid1.compartment.oc1..aaaa...
+        vault_id: ocid1.vault.oc1..aaaa...
         secrets:
           - openai-services
 """,

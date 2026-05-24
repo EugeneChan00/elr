@@ -51,7 +51,7 @@ class SopsSyncTests(unittest.TestCase):
                         "dev-env": {
                             "compartment_id": "compartment",
                             "vault_id": "vault",
-                            "secrets": ["sops-age-keys"],
+                            "secrets": ["sops-age-key-example"],
                         }
                     }
                 }
@@ -65,7 +65,7 @@ class SopsSyncTests(unittest.TestCase):
                     catalog_id="default",
                     provider="oci",
                     location="dev-env",
-                    vault_key="sops-age-keys",
+                    vault_key="sops-age-key-example",
                 )
                 resolved = ResolvedConfig(
                     providers={
@@ -74,7 +74,7 @@ class SopsSyncTests(unittest.TestCase):
                                 "dev-env": {
                                     "compartment_id": "compartment",
                                     "vault_id": "vault",
-                                    "secrets": ["sops-age-keys"],
+                                    "secrets": ["sops-age-key-example"],
                                 }
                             }
                         }
@@ -85,7 +85,7 @@ class SopsSyncTests(unittest.TestCase):
                             catalog_id="default",
                             provider="oci",
                             location="dev-env",
-                            vault_key="sops-age-keys",
+                            vault_key="sops-age-key-example",
                             source=Path("config.yaml"),
                         )
                     },
@@ -129,7 +129,7 @@ class SopsSyncTests(unittest.TestCase):
                         catalog_id="default",
                         provider="oci",
                         location="dev-env",
-                        vault_key="sops-age-keys",
+                        vault_key="sops-age-key-example",
                         source=Path("config.yaml"),
                     )
                 },
@@ -230,7 +230,7 @@ sops:
   keys:
     default:
       location: dev-env
-      key: sops-age-keys
+      key: sops-age-key-example
 """,
                 encoding="utf-8",
             )
@@ -256,7 +256,7 @@ sops:
   keys:
     default:
       location: dev-env
-      key: sops-age-keys
+      key: sops-age-key-example
 """,
                 encoding="utf-8",
             )
@@ -282,7 +282,7 @@ sops:
   keys:
     default:
       location: dev-env
-      key: sops-age-keys
+      key: sops-age-key-example
 """,
                 encoding="utf-8",
             )
