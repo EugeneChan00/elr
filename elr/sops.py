@@ -133,7 +133,7 @@ def shell_source_lines(settings: SopsSettings, *, sync: bool = False, config: Re
         sync_age_key(settings, config)
     elif not age_key_present(path):
         raise ElrError(
-            f"age key file not found: {path}; run `elr age sync` or `elr sops source --sync`"
+            f"age key file not found: {path}; run `elr sops sync` or `elr sops source --sync`"
         )
 
     quoted = shlex.quote(str(path))

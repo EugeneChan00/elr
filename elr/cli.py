@@ -44,8 +44,6 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:2] == ["profile", "add"]:
         return _profile_add(argv[2:])
-    if argv[:2] == ["age", "sync"]:
-        return _age_sync(argv[2:])
     if argv and argv[0] == "sops":
         return _sops(argv[1:])
 
@@ -78,9 +76,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
 
-def _age_sync(argv: list[str]) -> int:
+def _sops_sync(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        prog="elr age sync",
+        prog="elr sops sync",
         description="Fetch the SOPS age private key from OCI Vault and write keys.txt locally.",
     )
     parser.add_argument("--force", action="store_true", help="overwrite an existing age key file")
@@ -107,10 +105,10 @@ def _sops(argv: list[str]) -> int:
     if not argv:
         raise SystemExit(_sops_help())
 
+    if argv[0] == "sync":
+        return _sops_sync(argv[1:])
     if argv[0] == "source":
         return _sops_source(argv[1:])
-    if argv[0] == "store":
-        return _sops_store(argv[1:])
     if argv[0] in ("exec", "run") or (argv[0] == "--" and len(argv) > 1):
         if argv[0] == "--":
             argv = argv[1:]
@@ -126,11 +124,11 @@ def _sops(argv: list[str]) -> int:
 
 def _sops_help() -> int:
     print(
-        "usage: elr sops {source|store|exec} ...\n"
+        "usage: elr sops {sync|source|exec} ...\n"
         "       elr sops -- <command> [args...]\n"
         "\n"
+        "  sync     fetch age key from OCI Vault → ~/.config/sops/age/keys.txt\n"
         "  source   print shell exports for SOPS_AGE_KEY_FILE (use: eval \"$(elr sops source)\")\n"
-        "  store    fetch age key from OCI Vault and write keys.txt (alias for elr age sync)\n"
         "  exec     sync age key and run: sops exec-env .env.sops -- <command>\n",
         file=sys.stderr,
     )
@@ -162,10 +160,6 @@ def _sops_source(argv: list[str]) -> int:
     except ElrError as exc:
         print(f"elr: {exc}", file=sys.stderr)
         return 1
-
-
-def _sops_store(argv: list[str]) -> int:
-    return _age_sync(argv)
 
 
 def _sops_exec(argv: list[str]) -> int:

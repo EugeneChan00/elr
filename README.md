@@ -37,7 +37,7 @@ application secrets in an encrypted `.env.sops` in git. Daily workflows use
 | --- | --- |
 | PEM / OCI API key | Authenticate to Oracle Vault |
 | Oracle Vault | Store `sops-age-key` (age private key) |
-| ELR | `elr age sync` / `elr sops store` → `~/.config/sops/age/keys.txt` |
+| ELR | `elr sops sync` → `~/.config/sops/age/keys.txt` |
 | SOPS | Encrypt/decrypt `.env.sops` (MC_HOST_*, API keys, …) |
 | direnv | Decrypt on `cd` into the project |
 
@@ -74,16 +74,15 @@ Store the vault secret as full `keys.txt` output from `age-keygen`, a single
 ### Commands
 
 ```bash
-elr age sync                              # PEM → Vault → ~/.config/sops/age/keys.txt
-elr sops store                            # alias for age sync
+elr sops sync                             # PEM → Vault → ~/.config/sops/age/keys.txt
 eval "$(elr sops source)"                 # export SOPS_AGE_KEY_FILE in current shell
-eval "$(elr sops source --sync)"           # fetch key first if missing
+eval "$(elr sops source --sync)"          # fetch key first if missing
 elr sops -- mc ls my-alias/bucket         # one-shot: sync + sops exec-env .env.sops
 ```
 
 ### direnv
 
-See `examples/envrc.sops` for a `.envrc` that runs `elr age sync` when the key
+See `examples/envrc.sops` for a `.envrc` that runs `elr sops sync` when the key
 file is missing, then sources decrypted dotenv from `.env.sops`.
 
 ```bash

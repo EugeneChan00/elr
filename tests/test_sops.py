@@ -115,7 +115,7 @@ class SopsCliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             source_mock.assert_called_once_with(settings, sync=False, config=config)
 
-    def test_age_sync_routes_to_sync(self):
+    def test_sops_sync_routes_to_sync(self):
         settings = SopsSettings(
             age_key_file=Path("/tmp/keys.txt"),
             env_file=Path(".env.sops"),
@@ -127,7 +127,7 @@ class SopsCliTests(unittest.TestCase):
         with patch("elr.cli.load_sops_settings", return_value=(settings, config)):
             with patch("elr.cli.age_key_present", return_value=False):
                 with patch("elr.cli.sync_age_key", return_value=settings.age_key_file) as sync_mock:
-                    code = cli.main(["age", "sync"])
+                    code = cli.main(["sops", "sync"])
         self.assertEqual(code, 0)
         sync_mock.assert_called_once()
 

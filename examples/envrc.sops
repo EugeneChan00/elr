@@ -1,7 +1,7 @@
 # Example direnv .envrc — copy relevant lines into your project .envrc
 
 if [[ ! -f "${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}" ]]; then
-  elr age sync
+  elr sops sync
 fi
 export SOPS_AGE_KEY_FILE="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
 watch_file .env.sops
