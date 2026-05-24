@@ -5,17 +5,16 @@ import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-from .config import ResolvedConfig, USER_CONFIG, load_config, load_yaml_file
 from .errors import ConfigError, ElrError
 from .providers.oci import OciSecretProvider
-
-DEFAULT_AGE_KEY_FILE = Path("~/.config/sops/age/keys.txt")
-DEFAULT_SOPS_ENV_FILE = ".env.sops"
-DEFAULT_OCI_SECRET = "sops-age-key"
-DEFAULT_OCI_LOCATION = "dev-env"
-DEFAULT_OCI_PROVIDER = "oci"
+from .sops_config import (
+    DEFAULT_KEY_ID,
+    ResolvedSopsConfig,
+    SopsKeySpec,
+    list_sync_plan,
+    load_sops_config,
+)
 
 
 @dataclass(frozen=True)
@@ -25,44 +24,64 @@ class SopsSettings:
     provider: str
     location: str
     secret: str
+    key_id: str = DEFAULT_KEY_ID
 
 
 def load_sops_settings(
     *,
-    config_path: Path | None = None,
+    explicit_config: str | None = None,
+    include_project: bool = True,
+    key_id: str | None = None,
     age_key_file: str | None = None,
     location: str | None = None,
     secret: str | None = None,
     provider: str | None = None,
     env_file: str | None = None,
-) -> tuple[SopsSettings, ResolvedConfig]:
-    path = (config_path or USER_CONFIG).expanduser()
-    sops_section: dict[str, Any] = {}
-    if path.is_file():
-        data = load_yaml_file(path)
-        raw = data.get("sops")
-        if raw is not None:
-            if not isinstance(raw, dict):
-                raise ConfigError(f"sops must be a mapping in {path}")
-            sops_section = raw
-
-    resolved_provider = provider or sops_section.get("provider") or DEFAULT_OCI_PROVIDER
-    resolved_location = location or sops_section.get("location") or DEFAULT_OCI_LOCATION
-    resolved_secret = secret or sops_section.get("secret") or DEFAULT_OCI_SECRET
-    resolved_age_key = age_key_file or sops_section.get("age_key_file") or str(DEFAULT_AGE_KEY_FILE)
-    resolved_env_file = env_file or sops_section.get("env_file") or DEFAULT_SOPS_ENV_FILE
-
-    config = load_config(include_project=False)
-    return (
-        SopsSettings(
-            age_key_file=Path(resolved_age_key).expanduser().resolve(),
-            env_file=Path(resolved_env_file),
-            provider=str(resolved_provider),
-            location=str(resolved_location),
-            secret=str(resolved_secret),
-        ),
-        config,
+) -> tuple[SopsSettings, ResolvedSopsConfig]:
+    resolved = load_sops_config(
+        explicit_config,
+        include_project=include_project,
+        key_id=key_id,
     )
+    spec = resolved.keys[resolved.active_key]
+    settings = _settings_from_spec(spec)
+
+    if provider:
+        settings = _replace(settings, provider=provider)
+    if location:
+        settings = _replace(settings, location=location)
+    if secret:
+        settings = _replace(settings, secret=secret)
+    if age_key_file:
+        settings = _replace(settings, age_key_file=Path(age_key_file).expanduser().resolve())
+    if env_file:
+        settings = _replace(settings, env_file=Path(env_file))
+
+    return settings, resolved
+
+
+def _settings_from_spec(spec: SopsKeySpec) -> SopsSettings:
+    return SopsSettings(
+        age_key_file=spec.age_key_file,
+        env_file=spec.env_file,
+        provider=spec.provider,
+        location=spec.location,
+        secret=spec.secret,
+        key_id=spec.key_id,
+    )
+
+
+def _replace(settings: SopsSettings, **kwargs) -> SopsSettings:
+    data = {
+        "age_key_file": settings.age_key_file,
+        "env_file": settings.env_file,
+        "provider": settings.provider,
+        "location": settings.location,
+        "secret": settings.secret,
+        "key_id": settings.key_id,
+    }
+    data.update(kwargs)
+    return SopsSettings(**data)
 
 
 def age_key_present(path: Path) -> bool:
@@ -71,14 +90,14 @@ def age_key_present(path: Path) -> bool:
 
 def sync_age_key(
     settings: SopsSettings,
-    config: ResolvedConfig,
+    resolved: ResolvedSopsConfig,
     *,
     force: bool = False,
 ) -> Path:
     if age_key_present(settings.age_key_file) and not force:
         return settings.age_key_file
 
-    provider_config = config.providers.get(settings.provider)
+    provider_config = resolved.providers.get(settings.provider)
     if not isinstance(provider_config, dict):
         raise ConfigError(f"provider {settings.provider!r} is not configured")
 
@@ -125,12 +144,17 @@ def _minimal_keys_txt(secret_line: str) -> str:
     return f"# synced by elr\n{secret_line}"
 
 
-def shell_source_lines(settings: SopsSettings, *, sync: bool = False, config: ResolvedConfig | None = None) -> str:
+def shell_source_lines(
+    settings: SopsSettings,
+    *,
+    sync: bool = False,
+    resolved: ResolvedSopsConfig | None = None,
+) -> str:
     path = settings.age_key_file
     if sync:
-        if config is None:
-            _, config = load_sops_settings()
-        sync_age_key(settings, config)
+        if resolved is None:
+            settings, resolved = load_sops_settings(key_id=settings.key_id)
+        sync_age_key(settings, resolved)
     elif not age_key_present(path):
         raise ElrError(
             f"age key file not found: {path}; run `elr sops sync` or `elr sops source --sync`"
@@ -142,14 +166,14 @@ def shell_source_lines(settings: SopsSettings, *, sync: bool = False, config: Re
 
 def exec_with_sops(
     settings: SopsSettings,
-    config: ResolvedConfig,
+    resolved: ResolvedSopsConfig,
     command: list[str],
     *,
     sync: bool = True,
     cwd: Path | None = None,
 ) -> int:
     if sync:
-        sync_age_key(settings, config)
+        sync_age_key(settings, resolved)
 
     env = os.environ.copy()
     env["SOPS_AGE_KEY_FILE"] = str(settings.age_key_file)
@@ -168,10 +192,33 @@ def exec_with_sops(
     return int(completed.returncode)
 
 
-def print_shell_source(settings: SopsSettings, *, sync: bool, config: ResolvedConfig) -> None:
-    print(shell_source_lines(settings, sync=sync, config=config), end="")
+def print_shell_source(
+    settings: SopsSettings,
+    *,
+    sync: bool,
+    resolved: ResolvedSopsConfig,
+) -> None:
+    print(shell_source_lines(settings, sync=sync, resolved=resolved), end="")
 
 
-def print_sync_status(path: Path, *, created: bool) -> None:
+def print_sync_status(path: Path, *, created: bool, key_id: str | None = None) -> None:
+    label = f" ({key_id})" if key_id else ""
     action = "Wrote" if created else "Age key already present at"
-    print(f"{action}: {path}")
+    print(f"{action}{label}: {path}")
+
+
+def print_sops_plan(resolved: ResolvedSopsConfig, *, active_only: bool = False) -> None:
+    print("Config files:")
+    for path in resolved.loaded_files:
+        print(f"  - {path}")
+    print("SOPS keys:")
+    for key_id, spec in list_sync_plan(resolved):
+        if active_only and key_id != resolved.active_key:
+            continue
+        marker = " (active)" if key_id == resolved.active_key else ""
+        print(f"  - {key_id}{marker}:")
+        print(f"      provider: {spec.provider}")
+        print(f"      location: {spec.location}")
+        print(f"      secret:   {spec.secret}")
+        print(f"      key file: {spec.age_key_file}")
+        print(f"      env file: {spec.env_file}")

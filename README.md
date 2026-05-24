@@ -41,43 +41,58 @@ application secrets in an encrypted `.env.sops` in git. Daily workflows use
 | SOPS | Encrypt/decrypt `.env.sops` (MC_HOST_*, API keys, …) |
 | direnv | Decrypt on `cd` into the project |
 
-### Private config (SOPS-only)
+### Layered manifests (same idea as `env.oci.yaml`)
+
+| File | Role |
+| --- | --- |
+| `/etc/elr/config.yaml` | System baseline: `providers` + `sops.keys` catalog |
+| `~/.config/elr/config.yaml` | User overlay: more keys, auth, defaults |
+| `sops.oci.yaml` (repo root) | Project overlay: `sync.key` picks which catalog entry this repo uses |
+
+Later files **merge** `providers` and `sops.keys` (deep merge). The repo file only
+needs the public part — which key id and which `.env.sops` file.
+
+**Baseline** (`examples/sops-config.yaml`):
 
 ```yaml
-# ~/.config/elr/config.yaml
-version: 1
-
 sops:
-  age_key_file: ~/.config/sops/age/keys.txt
-  location: dev-env
-  secret: sops-age-key
-  env_file: .env.sops
-
+  defaults:
+    key: default
+    age_key_dir: ~/.config/sops/age
+  keys:
+    default:
+      location: dev-env
+      secret: sops-age-key
+    work:
+      location: dev-env
+      secret: sops-age-key-work
 providers:
-  oci:
-    auth:
-      mode: config_file
-      config_file: ~/.oci/config
-      profile: ELR
-    locations:
-      dev-env:
-        compartment_id: ocid1.compartment.oc1...
-        vault_id: ocid1.vault.oc1...
-        secrets:
-          - sops-age-key
+  oci: { ... }
 ```
 
-Set `auth.region` to your OCI home region (see `elr profile add` / `ELR_OCI_REGION`).
-Store the vault secret as full `keys.txt` output from `age-keygen`, a single
-`AGE-SECRET-KEY-1...` line, or dotenv `SOPS_AGE_KEY=...`.
+**Repo overlay** (`examples/sops.oci.yaml`):
+
+```yaml
+sync:
+  key: work
+  env_file: .env.sops
+```
+
+`elr sops sync` in that repo fetches `sops-age-key-work` → `~/.config/sops/age/work.txt`.
+Flat `sops: { secret, age_key_file, ... }` in user config still maps to `keys.default`.
+
+Set `auth.region` on the OCI provider (see `elr profile add`). Vault secret body can be
+full `keys.txt`, a single `AGE-SECRET-KEY-1...` line, or `SOPS_AGE_KEY=...`.
 
 ### Commands
 
 ```bash
-elr sops sync                             # PEM → Vault → ~/.config/sops/age/keys.txt
-eval "$(elr sops source)"                 # export SOPS_AGE_KEY_FILE in current shell
-eval "$(elr sops source --sync)"          # fetch key first if missing
-elr sops -- mc ls my-alias/bucket         # one-shot: sync + sops exec-env .env.sops
+elr sops sync                  # active key for this repo (from sops.oci.yaml)
+elr sops sync work             # named key from catalog
+elr sops sync --all            # every key in sops.keys
+elr sops sync --print-plan     # show resolved keys/paths (no Vault fetch)
+eval "$(elr sops source)"      # export SOPS_AGE_KEY_FILE for active repo key
+elr sops -- mc ls my-bucket    # sync active key + sops exec-env
 ```
 
 ### direnv

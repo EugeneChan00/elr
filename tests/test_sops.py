@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from elr import cli
-from elr.config import ResolvedConfig
+from elr.sops_config import ResolvedSopsConfig
 from elr.errors import ElrError
 from elr.providers.oci import OciSecretProvider
 from elr.sops import (
@@ -63,7 +63,7 @@ class SopsSyncTests(unittest.TestCase):
                     location="dev-env",
                     secret="sops-age-key",
                 )
-                config = ResolvedConfig(
+                resolved = ResolvedSopsConfig(
                     providers={
                         "oci": {
                             "locations": {
@@ -74,9 +74,11 @@ class SopsSyncTests(unittest.TestCase):
                                 }
                             }
                         }
-                    }
+                    },
+                    keys={},
+                    active_key="default",
                 )
-                path = sync_age_key(settings, config, force=True)
+                path = sync_age_key(settings, resolved, force=True)
 
             self.assertEqual(path, key_path.resolve())
             self.assertTrue(key_path.is_file())
@@ -108,12 +110,12 @@ class SopsCliTests(unittest.TestCase):
                 location="dev-env",
                 secret="sops-age-key",
             )
-            config = ResolvedConfig(providers={"oci": {}})
-            with patch("elr.cli.load_sops_settings", return_value=(settings, config)):
+            resolved = ResolvedSopsConfig(providers={"oci": {}}, keys={}, active_key="default")
+            with patch("elr.cli.load_sops_settings", return_value=(settings, resolved)):
                 with patch("elr.cli.print_shell_source") as source_mock:
                     code = cli.main(["sops", "source"])
             self.assertEqual(code, 0)
-            source_mock.assert_called_once_with(settings, sync=False, config=config)
+            source_mock.assert_called_once_with(settings, sync=False, resolved=resolved)
 
     def test_sops_sync_routes_to_sync(self):
         settings = SopsSettings(
@@ -123,8 +125,8 @@ class SopsCliTests(unittest.TestCase):
             location="dev-env",
             secret="sops-age-key",
         )
-        config = ResolvedConfig(providers={"oci": {}})
-        with patch("elr.cli.load_sops_settings", return_value=(settings, config)):
+        resolved = ResolvedSopsConfig(providers={"oci": {}}, keys={}, active_key="default")
+        with patch("elr.cli.load_sops_settings", return_value=(settings, resolved)):
             with patch("elr.cli.age_key_present", return_value=False):
                 with patch("elr.cli.sync_age_key", return_value=settings.age_key_file) as sync_mock:
                     code = cli.main(["sops", "sync"])

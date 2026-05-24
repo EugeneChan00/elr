@@ -14,6 +14,7 @@ from .sops import (
     exec_with_sops,
     load_sops_settings,
     print_shell_source,
+    print_sops_plan,
     print_sync_status,
     sync_age_key,
 )
@@ -79,22 +80,53 @@ def main(argv: list[str] | None = None) -> int:
 def _sops_sync(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="elr sops sync",
-        description="Fetch the SOPS age private key from OCI Vault and write keys.txt locally.",
+        description="Fetch SOPS age private key(s) from OCI Vault using the layered sops manifest.",
     )
-    parser.add_argument("--force", action="store_true", help="overwrite an existing age key file")
-    parser.add_argument("--location", help="OCI location name (default: dev-env or config sops.location)")
-    parser.add_argument("--secret", help="OCI vault secret name (default: sops-age-key)")
-    parser.add_argument("--age-key-file", help="destination keys.txt path")
+    parser.add_argument(
+        "key",
+        nargs="?",
+        help="sops key id from config (default: repo sync.key or sops.defaults.key)",
+    )
+    parser.add_argument("--all", action="store_true", help="sync every key in the merged sops.keys catalog")
+    parser.add_argument(
+        "--print-plan",
+        action="store_true",
+        help="show resolved sops keys and paths without fetching secrets",
+    )
+    parser.add_argument("-f", "--sops-config", help="explicit sops/env config YAML path")
+    parser.add_argument("--force", action="store_true", help="overwrite existing age key file(s)")
+    parser.add_argument("--location", help="override OCI location for the selected key")
+    parser.add_argument("--secret", help="override OCI vault secret name")
+    parser.add_argument("--age-key-file", help="override destination keys.txt path")
     args = parser.parse_args(argv)
     try:
-        settings, config = load_sops_settings(
+        if args.print_plan:
+            _, resolved = load_sops_settings(
+                explicit_config=args.sops_config,
+                key_id=args.key,
+            )
+            print_sops_plan(resolved, active_only=not args.all and not args.key)
+            return 0
+
+        if args.all:
+            _, resolved = load_sops_settings(explicit_config=args.sops_config)
+            for key_id, spec in resolved.keys.items():
+                settings = _settings_from_spec(spec)
+                existed = age_key_present(settings.age_key_file)
+                path = sync_age_key(settings, resolved, force=args.force)
+                print_sync_status(path, created=not existed or args.force, key_id=key_id)
+            return 0
+
+        settings, resolved = load_sops_settings(
+            explicit_config=args.sops_config,
+            key_id=args.key,
             age_key_file=args.age_key_file,
             location=args.location,
             secret=args.secret,
         )
         existed = age_key_present(settings.age_key_file)
-        path = sync_age_key(settings, config, force=args.force)
-        print_sync_status(path, created=not existed or args.force)
+        path = sync_age_key(settings, resolved, force=args.force)
+        print_sync_status(path, created=not existed or args.force, key_id=settings.key_id)
         return 0
     except ElrError as exc:
         print(f"elr: {exc}", file=sys.stderr)
@@ -127,7 +159,7 @@ def _sops_help() -> int:
         "usage: elr sops {sync|source|exec} ...\n"
         "       elr sops -- <command> [args...]\n"
         "\n"
-        "  sync     fetch age key from OCI Vault → ~/.config/sops/age/keys.txt\n"
+        "  sync     fetch age key(s) from OCI Vault (repo sops.oci.yaml selects active key)\n"
         "  source   print shell exports for SOPS_AGE_KEY_FILE (use: eval \"$(elr sops source)\")\n"
         "  exec     sync age key and run: sops exec-env .env.sops -- <command>\n",
         file=sys.stderr,
@@ -150,12 +182,12 @@ def _sops_source(argv: list[str]) -> int:
     parser.add_argument("--age-key-file", help="age keys.txt path")
     args = parser.parse_args(argv)
     try:
-        settings, config = load_sops_settings(
+        settings, resolved = load_sops_settings(
             age_key_file=args.age_key_file,
             location=args.location,
             secret=args.secret,
         )
-        print_shell_source(settings, sync=args.sync, config=config)
+        print_shell_source(settings, sync=args.sync, resolved=resolved)
         return 0
     except ElrError as exc:
         print(f"elr: {exc}", file=sys.stderr)
@@ -176,7 +208,7 @@ def _sops_exec(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     try:
         command = _parse_command(args.cmd, require_command=True)
-        settings, config = load_sops_settings(
+        settings, resolved = load_sops_settings(
             age_key_file=args.age_key_file,
             location=args.location,
             secret=args.secret,
@@ -184,7 +216,7 @@ def _sops_exec(argv: list[str]) -> int:
         )
         return exec_with_sops(
             settings,
-            config,
+            resolved,
             command,
             sync=not args.no_sync,
         )

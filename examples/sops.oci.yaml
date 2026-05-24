@@ -1,0 +1,7 @@
+version: 1
+
+# Public repo overlay — safe to commit. Selects which baseline key this repo uses.
+
+sync:
+  key: work
+  env_file: .env.sops
