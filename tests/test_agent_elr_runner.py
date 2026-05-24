@@ -33,6 +33,18 @@ class AgentElrRunnerTests(unittest.TestCase):
                 self.assertEqual(code, 0)
                 self.assertEqual(runner.os.environ.get("FOO"), "bar")
 
+    def test_load_only_uses_build_run_env(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = Path(tmp) / "env.oci.yaml"
+            manifest.write_text("version: 1\nlocal:\n  FOO: bar\n", encoding="utf-8")
+
+            with patch("agent_elr_runner.build_run_env", return_value={"FOO": "from-build-run-env"}) as env_mock:
+                with patch.dict("os.environ", {}, clear=True):
+                    code = runner.main(["-e", str(manifest), "--load-only"])
+                    self.assertEqual(code, 0)
+                    env_mock.assert_called_once()
+                    self.assertEqual(runner.os.environ.get("FOO"), "from-build-run-env")
+
     def test_print_plan_without_fetch(self):
         yaml_text = """
 version: 1

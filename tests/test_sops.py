@@ -171,6 +171,44 @@ class SopsRunEnvTests(unittest.TestCase):
                     env = build_run_env(resolved, fetch_imports=True, base_env={})
             self.assertEqual(env["APP_KEY"], "secret")
 
+    def test_build_run_env_local_overrides_imports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            key_path = Path(tmp) / "keys.txt"
+            write_age_key_file(key_path, KEYS_TXT)
+            resolved = ResolvedConfig(
+                keys_file=key_path,
+                local={"SHARED": "local-wins"},
+            )
+            with patch(
+                "elr.sops.resolve_env",
+                return_value=types.SimpleNamespace(values={"SHARED": "import-val", "IMPORT_ONLY": "yes"}),
+            ):
+                env = build_run_env(resolved, fetch_imports=True, base_env={})
+            self.assertEqual(env["SHARED"], "local-wins")
+            self.assertEqual(env["IMPORT_ONLY"], "yes")
+
+    def test_build_run_env_later_sops_env_overrides_earlier(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            key_path = Path(tmp) / "keys.txt"
+            early = Path(tmp) / "early.env.sops"
+            late = Path(tmp) / "late.env.sops"
+            write_age_key_file(key_path, KEYS_TXT)
+            resolved = ResolvedConfig(
+                keys_file=key_path,
+                sops_env=[
+                    SopsEnvEntry(alias="app", path=early, layer=1, source=Path("user")),
+                    SopsEnvEntry(alias="deploy", path=late, layer=2, source=Path("repo")),
+                ],
+            )
+            with patch(
+                "elr.sops.decrypt_sops_env_file",
+                side_effect=[{"SHARED": "early"}, {"SHARED": "late", "DEPLOY_ONLY": "1"}],
+            ):
+                with patch("elr.sops.resolve_env", return_value=types.SimpleNamespace(values={})):
+                    env = build_run_env(resolved, fetch_imports=True, base_env={})
+            self.assertEqual(env["SHARED"], "late")
+            self.assertEqual(env["DEPLOY_ONLY"], "1")
+
 
 class SopsCliTests(unittest.TestCase):
     def test_sops_source_routes_to_printer(self):
@@ -227,6 +265,32 @@ sops:
                     code = cli.main(["sops", "sync", "-e", str(config_path)])
             self.assertEqual(code, 0)
             sync_mock.assert_called_once()
+
+    def test_sops_remove_routes_to_remove_age_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "env.oci.yaml"
+            config_path.write_text(
+                """
+version: 1
+providers:
+  oci:
+    locations:
+      dev-env:
+        compartment_id: c
+        vault_id: v
+sops:
+  keys:
+    default:
+      location: dev-env
+      key: sops-age-keys
+""",
+                encoding="utf-8",
+            )
+            with patch("elr.cli.remove_age_key", return_value=Path("/tmp/keys.txt")) as remove_mock:
+                code = cli.main(["sops", "remove", "default", "-e", str(config_path)])
+            self.assertEqual(code, 0)
+            remove_mock.assert_called_once()
+            self.assertEqual(remove_mock.call_args.args[1], "default")
 
 
 class FakeVaultsClient:

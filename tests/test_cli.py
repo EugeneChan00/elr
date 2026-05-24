@@ -41,6 +41,17 @@ class CliTests(unittest.TestCase):
             exec_mock.assert_called_once()
             self.assertEqual(exec_mock.call_args.args[0], ["echo", "ok"])
 
+    def test_default_run_strips_leading_double_dash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "env.oci.yaml"
+            config_path.write_text("version: 1\nlocal:\n  FOO: bar\n", encoding="utf-8")
+            with patch("elr.cli._exec") as exec_mock:
+                with patch("elr.cli.build_run_env", return_value={"FOO": "bar"}):
+                    code = cli.main(["-e", str(config_path), "--", "echo", "ok"])
+            self.assertEqual(code, 0)
+            exec_mock.assert_called_once()
+            self.assertEqual(exec_mock.call_args.args[0], ["echo", "ok"])
+
     def test_profile_add_routes_to_profile_writer(self):
         output = io.StringIO()
         with patch("elr.cli.add_profile", return_value=("/tmp/config.yaml", None)) as add_mock:
