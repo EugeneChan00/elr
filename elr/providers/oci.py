@@ -75,8 +75,12 @@ class OciSecretProvider:
 
     def _load_allowed_secret_values(self, location: dict[str, Any]) -> dict[str, str]:
         secrets = location.get("secrets")
+        if secrets is None:
+            secrets = []
         if not isinstance(secrets, list) or not all(isinstance(item, str) for item in secrets):
-            raise ConfigError("OCI location requires secrets list")
+            raise ConfigError("OCI location secrets must be a list of strings when present")
+        if not secrets:
+            return {}
 
         values: dict[str, str] = {}
         for secret_name in secrets:

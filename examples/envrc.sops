@@ -1,4 +1,7 @@
 # Example direnv .envrc — copy relevant lines into your project .envrc
+#
+# Prefer `elr <cmd>` for full env (all sops.env + imports + local), or mirror
+# decrypt-all behavior here for interactive shells.
 
 if [[ ! -f "${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}" ]]; then
   elr sops sync

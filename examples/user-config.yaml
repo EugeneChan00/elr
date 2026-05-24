@@ -1,35 +1,48 @@
 version: 1
 
-# Private user baseline (~/.config/elr/config.yaml) — providers + sops.keys catalog.
-
-sops:
-  defaults:
-    key: default
-    env_file: .env.sops
-    age_key_dir: ~/.config/sops/age
-  keys:
-    default:
-      provider: oci
-      location: dev-env
-      secret: sops-age-key
-    work:
-      provider: oci
-      location: dev-env
-      secret: sops-age-key-work
-
+# providers — OCI connectivity + dotenv bundle allowlist (private; do not commit to git)
+# WHY: ELR needs compartment/vault IDs and which Vault *bundles* hold KEY=VALUE dotenv for imports.
 providers:
   oci:
     auth:
-      mode: config_file
+      mode: config_file      # HOW: OCI SDK auth via ~/.oci/config profile
       config_file: ~/.oci/config
-      profile: ELR
-
+      profile: ELR           # PEM/API key profile name
     locations:
-      dev-env:
-        compartment_id: ocid1.compartment.oc1...
-        vault_id: ocid1.vault.oc1...
-        secrets:
-          - sops-age-key
-          - sops-age-key-work
-          - github-services
-          - openai-services
+      dev-env:                 # LOCATION ID — referenced by sops.keys.*.location and imports.*.location
+        compartment_id: ocid1.tenancy.oc1..aaaa...
+        vault_id: ocid1.vault.oc1.phx...
+        secrets:               # BUNDLE ALLOWLIST — OCI object names containing dotenv vars (NOT age keys)
+          - github-services    # WHY listed: imports[].vars can pull GH_TOKEN from this bundle
+          - agent-service
+          - network-service
+          - buckets
+          - sops-age-keys      # optional; only if age payload also stored as named bundle
+
+# sops — age bootstrap (keys.txt) + encrypted env file paths (.env.sops)
+# WHY: separate from providers; controls SOPS decrypt + elr sops sync/source/remove
+sops:
+  keys_file: ~/.config/sops/age/keys.txt   # WHY: one master age key file on disk for SOPS_AGE_KEY_FILE
+  keys:
+    default:                  # catalog_id — `elr sops sync default`, `elr sops remove default`
+      location: dev-env
+      key: sops-age-keys      # WHY .key not .secret: OCI Vault OBJECT NAME for age keys.txt payload
+    work:
+      location: dev-env
+      key: sops-age-key-work
+  env:                        # WHY: `elr <cmd>` decrypts ALL paths listed here into child env
+    app: .env.sops
+    deploy: ./deploy/.env.sops
+
+# imports — pull named KEYs from OCI dotenv bundles (locations.secrets allowlist)
+# WHY: vars not yet migrated to .env.sops; vars MUST be YAML list
+imports:
+  - provider: oci
+    location: dev-env
+    vars:
+      - GH_TOKEN
+      - OPENAI_API_KEY
+
+# local — plain env vars merged into child process (no Vault, no SOPS)
+local:
+  SOME_FLAG: "1"
